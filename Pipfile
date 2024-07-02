@@ -10,7 +10,7 @@ wheel = "*"
 twine = "*"
 rich = "*"
 tqdm = "*"
-orzmc = {editable = true, path = "."}
+orzmc = {file = ".", editable = true}
 
 [dev-packages]
 

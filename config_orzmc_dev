@@ -3,12 +3,11 @@
 # set -x
 
 function config_python_env {
-    pipenv --three  install     \
-                    install     \
-                    setuptools  \
-                    wheel       \
-                    twine       \
-                    -e .
+    pipenv  install     \
+            setuptools  \
+            wheel       \
+            twine       \
+            -e .
 }
 
 function config_darwin {
