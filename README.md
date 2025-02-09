@@ -13,7 +13,7 @@ OrzMC Writed by Python Language
 工具已上传到`Python`包管理网站 [PyPi][orzmc-pypi]，可以使用`pip`进行安装
 
 ```python
-$ pip install orzmc
+$ python3 -m pip install orzmc
 $ orzmc -h # 查看使用帮助
 ```
 
@@ -21,8 +21,8 @@ $ orzmc -h # 查看使用帮助
 
 ```bash
 $ git clone --recurse-submodules \
-      https://github.com/OrzGeeker/OrzMC.git && \
-      cd OrzMC && ./config_orzmc_dev && pipenv shell
+      https://github.com/OrzGeeker/OrzPythonMC.git && \
+      cd OrzPythonMC && ./setup && pipenv shell
 ```
 
 ## 项目待办
