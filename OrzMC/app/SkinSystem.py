@@ -37,7 +37,7 @@ class SkinSystem:
             os.system(cmd)
         cmd = f'sudo apt-get update || sudo apt-get install {bins} -y && '\
         f'cd {web_site_dir} && sudo git clone {skin_system_repo_url} && cd {skin_system_dir} && '\
-        f'sudo git checkout `git tag | sort -V | grep -v "\-rc" | tail -1` && '\
+        f'sudo git checkout `git tag | sort -V | grep -v "\\-rc" | tail -1` && '\
         f'sudo rm -rf .git && sudo rm -rf .gitignore && sudo rm -rf *.md && cd .. && '\
         f'sudo chmod 775 -R {skin_system_web_absolute_dir} && sudo chown -R www-data:www-data {skin_system_web_absolute_dir}'
 

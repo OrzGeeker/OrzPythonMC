@@ -116,7 +116,7 @@ server {{
     }}
 
     # pass PHP scripts to FastCGI server
-    location ~ \.php$ {{
+    location ~ \\.php$ {{
         include snippets/fastcgi-php.conf;
         # With php-fpm (or other unix sockets):
         fastcgi_pass {fastcgi_pass};
