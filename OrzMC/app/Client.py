@@ -5,6 +5,8 @@ from ..utils.utils import *
 from ..utils.ColorString import ColorString
 from ..core.OptiFine import OptiFine
 from ..core.Fabric import Fabric
+from ..infra.fs import FileStore
+from ..domain import resolve_libraries
 
 import os
 import uuid
@@ -16,12 +18,19 @@ class Client:
     def __init__(self, config):
         self.config = config
         self.downloader = Downloader(self.config)
+        self.fs = FileStore()
     
     def start(self):
         if not self.config.is_client:
             return 
+        self.prepare_client()
+        self.launch_client()
 
-        if self.config.isPure :
+    def prepare_client(self):
+        if not self.config.is_client:
+            return
+        if self.config.isPure:
+            self.fs.ensure_dir(self.config.game_version_client_dir())
             self.downloader.downloadGameJSON()
             self.downloader.downloadClient()
             self.downloader.downloadAssetIndex()
@@ -34,8 +43,10 @@ class Client:
                 self.extractForgeClient()
         else:
             ColorString.warn('Not Known Client!!!!')
-            return
 
+    def launch_client(self):
+        if not self.config.is_client:
+            return
         user = self.config.username
         resolution = ('960', '540')
 
@@ -48,6 +59,7 @@ class Client:
             backgroundCmd = 'start ' + cmd
             backgroundCmd = cmd
             
+        self.fs.ensure_dir(self.config.game_version_client_dir())
         os.chdir(self.config.game_version_client_dir())
         os.system(backgroundCmd)
         print(ColorString.confirm('Start Client Successfully!!!'))
@@ -68,70 +80,19 @@ class Client:
 
         javaClassPathList = []
 
-        libs = self.config.game_version_json_obj().get('libraries')
-        total = len(libs)
-        
-        index = 0
-        for lib in libs: 
-            downloads = lib.get('downloads')
-
-            rules = lib.get('rules')
-            isContinue = False
-            if None != rules:
-                for rule in rules:
-                    if None != rule:
-                        if rule.get('action') == 'disallow':
-                            if rule.get('os').get('name') == platformType():
-                                isContinue
-
-                        if rule.get('action') == 'allow':
-                            allow_os = rule.get('os')
-                            if allow_os and allow_os.get('name') != platformType():
-                                isContinue = True
-
-            if isContinue:
-                continue
-
-            libPath = None
-            url = None
-            sha1 = None
-            nativeKey = 'natives-'+ platformType()
-            if 'natives' in lib:
-                platform = lib.get('natives').get(platformType())
-                if platform == None:
-                    continue
-                else:
-                    libPath = downloads.get('classifiers').get(platform).get('path')
-                    url = downloads.get('classifiers').get(platform).get('url')
-                    sha1 = downloads.get('classifiers').get(platform).get('sha1')
-                    nativeFilePath = os.path.join(self.config.game_version_client_native_library_dir(),os.path.basename(url))
-                    if not checkFileExist(nativeFilePath,sha1):
-                        continue
-                    else:
-                        javaClassPathList.append(nativeFilePath)
+        libs = resolve_libraries(self.config.game_version_json_obj(), platformType())
+        for lib in libs:
+            url = lib.get('url')
+            sha1 = lib.get('sha1')
+            if lib.get('kind') == 'native':
+                nativeFilePath = os.path.join(self.config.game_version_client_native_library_dir(),os.path.basename(url))
+                if checkFileExist(nativeFilePath,sha1):
+                    javaClassPathList.append(nativeFilePath)
             else:
-                classifiers = downloads.get('classifiers')
-                if classifiers and nativeKey in downloads.get('classifiers'):
-                    url = downloads.get('classifiers').get(nativeKey).get('url')
-                    sha1 = downloads.get('classifiers').get(platform).get('sha1')
-                    nativeFilePath = os.path.join(self.config.game_version_client_native_library_dir(),os.path.basename(url))
-                    if not checkFileExist(nativeFilePath,sha1):
-                        continue
-                    else:
-                        javaClassPathList.append(nativeFilePath)
-                        
-                libPath = downloads.get('artifact').get('path')
-                url = downloads.get('artifact').get('url')
-                sha1 = downloads.get('artifact').get('sha1')
-                if platformType() == 'windows' :
-                    libPath = libPath.replace('/','\\')
+                libPath = lib.get('path')
                 libFilePath = os.path.join(self.config.game_version_client_library_dir(), libPath)
-                if not checkFileExist(libFilePath,sha1):
-                    continue            
-                else:
+                if checkFileExist(libFilePath,sha1):
                     javaClassPathList.append(libFilePath)
-
-            index = index + 1
 
         if self.config.isForge:
             forge_class_path = map(lambda lib:  os.path.join(self.config.game_version_client_library_dir(),lib.get('downloads').get('artifact').get('path')) ,self.config.game_version_json_obj().get('libraries')) 
@@ -319,6 +280,7 @@ class Client:
         extractForgeClientCmd = 'java -jar ' + installerJarFilePath
 
         print(ColorString.warn('Start install the forge client jar file ...'))
+        self.fs.ensure_dir(self.config.game_version_client_dir())
         os.chdir(self.config.game_version_client_dir())
         os.system(extractForgeClientCmd)
         print(ColorString.confirm('Completed! And the forge client file generated!'))
@@ -342,6 +304,7 @@ class Client:
     def writeLauncherProfilesJSON(self):
         launcher_profiles_json_file_path = self.config.game_version_launcher_profiles_json_path()
         if not os.path.exists(launcher_profiles_json_file_path):
+            self.fs.ensure_dir(os.path.dirname(launcher_profiles_json_file_path))
             time = datetime.datetime.now().isoformat()
             version = self.config.version
             content = {

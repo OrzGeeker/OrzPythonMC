@@ -4,6 +4,7 @@ from ..core.Mojang import Mojang
 from .Constants import *
 from ..utils.utils import hint
 from ..utils.RichText import RichText
+from ..utils.ColorString import ColorString
 
 import os
 import json
@@ -31,6 +32,9 @@ class Console:
         '''控制台交互显示可选客户端版本号'''
         
         releaseVersions = Mojang.get_release_version_id_list(update = True)
+        if not releaseVersions or len(releaseVersions) == 0:
+            print(ColorString.error('No supported versions fetched'))
+            exit(-1)
         releaseVersions = releaseVersions[0:releaseVersions.index('1.13')+1]
         column = 6
         table_versions = [releaseVersions[i:i+column] for i in range(0, len(releaseVersions), column)]
@@ -39,7 +43,7 @@ class Console:
             table_data = table_versions)
 
         if len(releaseVersions) > 0:
-            self.config.version = releaseVersions[0] # 默认版本号
+            self.config.set_version(releaseVersions[0])
 
         select = hint(SELECT_VERSION_HINT % ('deploy' if not self.config.is_client else 'play' , DEFAULT_VERSION_HINT % self.config.version))
 
@@ -48,7 +52,7 @@ class Console:
             for releaseVersion in releaseVersions: 
                 if releaseVersion == select.strip():
                     found = True
-                    self.config.version = releaseVersion
+                    self.config.set_version(releaseVersion)
                     print(CHOOSED_VERSION % self.config.version)
             if not found:
                 print(NOT_FOUND_VERSION)

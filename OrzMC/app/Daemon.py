@@ -2,12 +2,21 @@
 import os
 from .Config import Config
 from ..utils.ColorString import ColorString
+from ..infra.runner import CommandRunner
+from ..infra.fs import FileStore
 
 class Daemon:
 
     @classmethod
     def setup(cls, config):
         '''配置minecraft守护进程，使用systemctl管理'''
+
+        if not config.yes:
+            systemctl_conf_file_path = Config.game_version_server_systemctl_conf_file_path()
+            print(ColorString.hint('Dry-run: systemd setup will be executed with --yes'))
+            print(ColorString.hint('Will write service file: %s' % systemctl_conf_file_path))
+            print(ColorString.hint('Will link to /etc/systemd/system and reload/enable/restart service'))
+            return
 
         daemon_name = 'Joker Minecraft Server'
         daemon_user = os.getlogin()
@@ -16,9 +25,10 @@ class Daemon:
         daemon_mc_max_mem = config.mem_max
         daemon_mc_server_type = config.game_type
         daemon_mc_title = 'jokermc'
-        orzmc_bin_path = os.popen('which orzmc').read().strip()
-        screen_bin_path = os.popen('which screen').read().strip()
-        sleep_bin_path = os.popen('which sleep').read().strip()
+        runner = CommandRunner()
+        orzmc_bin_path = runner.read('which orzmc')
+        screen_bin_path = runner.read('which screen')
+        sleep_bin_path = runner.read('which sleep')
         daemon_mc_stop_secs = 10
         daemon_mc_restart = '60s'
         daemon_mc_work_dir = '~'
@@ -50,6 +60,7 @@ WantedBy=multi-user.target
 """
         try:
             systemctl_conf_file_path = Config.game_version_server_systemctl_conf_file_path()
+            FileStore().ensure_dir(os.path.dirname(systemctl_conf_file_path))
             with open(systemctl_conf_file_path,'w',encoding='utf-8') as cfg:
                 cfg.write(systemctl_daemon_conf)
                 print(ColorString.confirm('minecraft.service has been writen in location: %s' % systemctl_conf_file_path))
@@ -63,7 +74,7 @@ WantedBy=multi-user.target
                     dest = minecraft_service_file_path,
                     service = minecraft_systemctl_conf_filename
                 )
-                ret = os.system(cmd)
+                ret = runner.run(cmd).code
                 if ret == 0:
                     print(ColorString.confirm('started service: %s' % minecraft_systemctl_conf_filename))
         except Exception as e:

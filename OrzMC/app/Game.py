@@ -2,8 +2,7 @@
 
 from .Config import Config
 from .Console import Console
-from .Client import Client
-from .Server import Server
+from .usecases import ClientUseCase, ServerUseCase
 
 from ..utils.utils import *
 from ..utils.ColorString import ColorString
@@ -15,7 +14,7 @@ class Game:
     def __init__(self, config):
         self.config = config
         self.console = Console(self.config)
-        self.game = Client(self.config) if self.config.is_client else Server(self.config)
+        self.usecase = ClientUseCase(self.config) if self.config.is_client else ServerUseCase(self.config)
         
     def start(self):
 
@@ -26,11 +25,11 @@ class Game:
         self.console.userInteraction()
 
         if self.config.debug:
-            self.game.start() 
+            self.usecase.plan().run()
         else:
             try:
                 #启动游戏
-                self.game.start()
+                self.usecase.plan().run()
                 
             except Exception as e:
                 print(e)

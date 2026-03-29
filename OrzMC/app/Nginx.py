@@ -1,14 +1,25 @@
 # -*- coding: utf8 -*-
 from .Config import Config
 from ..utils.ColorString import ColorString
+from ..infra.runner import CommandRunner
+from ..infra.fs import FileStore
 import os
 
 class Nginx:
     @classmethod
-    def setup(cls):
+    def setup(cls, config):
         '''配置并启动nginx'''
         nginx_config_file = Config.game_version_server_nginx_file_path()
+        if not config.yes:
+            print(ColorString.hint('Dry-run: nginx setup will be executed with --yes'))
+            print(ColorString.hint('Will write config: %s' % nginx_config_file))
+            print(ColorString.hint('Will link to /etc/nginx/conf.d and reload/start nginx'))
+            print(ColorString.hint('Will run certbot nginx https setup'))
+            return
         try:
+            runner = CommandRunner()
+            fs = FileStore()
+            fs.ensure_dir(os.path.dirname(nginx_config_file))
             with open(nginx_config_file, 'w', encoding='utf-8') as cfg:
                 cfg.write('\n'.join(filter(lambda x: x != None,[
                     Nginx.web_file_server_conf(), 
@@ -25,11 +36,11 @@ class Nginx:
             if os.path.exists(nginx_conf_dir) and os.path.isdir(nginx_conf_dir):
                 minecraft_nginx_conf_file = os.path.join(nginx_conf_dir, os.path.basename(nginx_config_file))
                 cmd = 'sudo ln -snf %s %s' % (nginx_config_file, minecraft_nginx_conf_file)
-                ret = os.system(cmd)
+                ret = runner.run(cmd).code
                 if ret == 0:
                     print(ColorString.confirm('Create symbol link file: %s' % minecraft_nginx_conf_file))
 
-                nginx_process_number = int(os.popen('ps -ef | grep nginx | grep -v grep | wc -l').read().strip())
+                nginx_process_number = int(runner.read('ps -ef | grep nginx | grep -v grep | wc -l') or '0')
                 cmd = None
                 if nginx_process_number > 0:
                     cmd = 'sudo nginx -s reload'
@@ -37,7 +48,7 @@ class Nginx:
                     cmd = 'sudo nginx'
 
                 if cmd:
-                    ret = os.system(cmd)
+                    ret = runner.run(cmd).code
                     if ret == 0:
                         print(ColorString.confirm('minecraft nginx config successfully!'))
                     else:
@@ -60,10 +71,34 @@ class Nginx:
         'sudo apt-get update ||'\
         'sudo apt-get install -y certbot python3-certbot-nginx &&'\
         'sudo certbot --nginx'
-        if os.system(cmd) == 0:
+        if CommandRunner().run(cmd).code == 0:
             print(ColorString.confirm('Config HTTPS successfully!'))
         else:
             print(ColorString.error("Config HTTPS failed!"))
+
+    @classmethod
+    def proxy_server_conf(cls, server_domain, upstream_url, port = 80, extra_headers = None):
+        header_lines = ''
+        if extra_headers:
+            header_lines = '\n'.join(['        ' + h for h in extra_headers]) + '\n'
+        return f"""
+server {{
+    listen {port};
+    server_name {server_domain};
+    location / {{
+        proxy_pass      {upstream_url};
+{header_lines}    }}
+}}
+"""
+
+    @classmethod
+    def upstream_conf(cls, name, servers):
+        lines = '\n'.join(['    server %s;' % s for s in servers])
+        return f"""
+upstream {name} {{
+{lines}
+}}
+"""
 
     
     @classmethod
@@ -96,7 +131,7 @@ server {{
         port=80
         file_server_root_dir = '/var/www/SkinSystem'
         server_domain = 'skin.jokerhub.cn'
-        php_fpm_bin_path = os.popen("whereis php-fpm | cut -d ' ' -f 2").read().strip()
+        php_fpm_bin_path = CommandRunner().read("whereis php-fpm | cut -d ' ' -f 2")
         if not os.path.exists(php_fpm_bin_path):
             print(ColorString.error('You have not install php environment!!!'))
             return None
@@ -127,74 +162,29 @@ server {{
     @classmethod
     def web_live_map_conf(cls):
         '''配置minecraft地图'''
-        port=80
-        server_domain = 'map.jokerhub.cn'
-        return f"""
-server {{
-    listen {port};
-    server_name {server_domain};
-    location / {{
-        proxy_pass      http://localhost:8123;
-    }}
-}}
-"""
+        return Nginx.proxy_server_conf('map.jokerhub.cn', 'http://localhost:8123')
 
     @classmethod
     def web_live_blue_map_conf(cls):
         '''配置minecraft 3D高清地图'''
-        port=80
-        server_domain = 'world.jokerhub.cn'
-        return f"""
-server {{
-    listen {port};
-    server_name {server_domain};
-    location / {{
-        proxy_pass      http://localhost:8100;
-    }}
-}}
-"""
+        return Nginx.proxy_server_conf('world.jokerhub.cn', 'http://localhost:8100')
 
     @classmethod
     def web_opq_qq_bot_conf(cls):
         '''配置QQ群管理机器人'''
-        port=80
-        server_domain = 'qqbot.jokerhub.cn'
-        return f"""
-server {{
-    listen {port};
-    server_name {server_domain};
-    location / {{
-        proxy_pass      http://localhost:8200;
-    }}
-}}  
-"""  
+        return Nginx.proxy_server_conf('qqbot.jokerhub.cn', 'http://localhost:8200')
 
     @classmethod
     def web_mc_client(cls):
         '''web端客户端'''
-        port=80
         server_domain = 'webmc.jokerhub.cn'
         proxy_domain = 'proxy.jokerhub.cn'
-        return f"""
-server {{
-    listen {port};
-    server_name {server_domain};
-    location / {{
-        proxy_pass      http://localhost:8300;
-    }}
-}}  
-upstream mineproxy {{
-    server localhost:8300;
-}}
-server {{
-    listen {port};
-    server_name {proxy_domain};
-    location / {{
-        proxy_pass      http://mineproxy;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection upgrade;
-        proxy_set_header Host $host;
-    }}
-}}  
-"""    
+        upstream = Nginx.upstream_conf('mineproxy', ['localhost:8300'])
+        webmc = Nginx.proxy_server_conf(server_domain, 'http://localhost:8300')
+        proxy = Nginx.proxy_server_conf(proxy_domain, 'http://mineproxy', extra_headers = [
+            'proxy_http_version 1.1;',
+            'proxy_set_header Upgrade $http_upgrade;',
+            'proxy_set_header Connection upgrade;',
+            'proxy_set_header Host $host;'
+        ])
+        return webmc + upstream + proxy

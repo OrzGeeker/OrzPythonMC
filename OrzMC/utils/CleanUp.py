@@ -1,4 +1,7 @@
 # -*- coding: utf8 -*-
+import signal
+from .utils import platformType
+from .ColorString import ColorString
 
 class CleanUp:
 
@@ -30,11 +33,9 @@ class CleanUp:
         CleanUp.executeCleanTask()
         exit(-1)
 
-
-import signal
-from .utils import platformType
-from .ColorString import ColorString
-signal.signal(signal.SIGINT, CleanUp.sigint_handler)
-signal.signal(signal.SIGTERM, CleanUp.sigint_handler)
-if platformType() != 'windows':
-    signal.signal(signal.SIGHUP, CleanUp.sigint_handler)
+    @classmethod
+    def enable(cls):
+        signal.signal(signal.SIGINT, CleanUp.sigint_handler)
+        signal.signal(signal.SIGTERM, CleanUp.sigint_handler)
+        if platformType() != 'windows':
+            signal.signal(signal.SIGHUP, CleanUp.sigint_handler)

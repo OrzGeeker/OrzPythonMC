@@ -10,6 +10,7 @@ from ..utils.ColorString import ColorString
 from ..utils.RichText import RichText
 from ..utils.CleanUp import CleanUp
 from ..utils.utils import *
+from ..infra.fs import FileStore
 
 from ..core.Spigot import Spigot
 
@@ -23,49 +24,56 @@ class Server:
     def __init__(self, config):
         self.config = config
         self.downloader = Downloader(self.config)
+        self.fs = FileStore()
         
     def start(self):
         '''start minecraft server'''    
         if self.config.is_client:
             return
 
-        is_return = False
+        if self.run_management_tasks():
+            return
+        jarFilePath = self.prepare_server()
+        if jarFilePath:
+            self.launch_server(jarFilePath)
+            print(ColorString.confirm('Start Server Successfully!!!'))
 
-        # 配置Nginx服务
+    def run_management_tasks(self):
+        is_return = False
         if self.config.nginx:
-            Nginx.setup()
+            Nginx.setup(self.config)
             is_return = True
-        # 配置Minecraft长驻服务
         if self.config.deamon:
             Daemon.setup(self.config)
             is_return = True
-        # 备份服务器地图文件
         if self.config.backup:
             self.backupWorld()
             is_return = True
-        # 配置服务器皮肤系统
         if self.config.skin_system:
-            SkinSystem.setup()
+            SkinSystem.setup(self.config)
             is_return = True
+        return is_return
 
-        if is_return:
-            return
-        
+    def prepare_server(self):
         if self.config.isPure:
+            self.fs.ensure_dir(self.config.game_version_server_dir())
             self.downloader.downloadGameJSON()
             self.downloadServer()
             (serverJARFilePath, _, _) = self.serverJARFilePath()
             jarFilePath = serverJARFilePath
         elif self.config.isSpigot:
+            self.fs.ensure_dir(self.config.game_version_server_dir())
             if self.config.force_download or not os.path.exists(self.config.game_version_server_jar_file_path()):
                 self.buildSpigotServer()
             jarFilePath = self.config.game_version_server_jar_file_path()
         elif self.config.isPaper:
+            self.fs.ensure_dir(self.config.game_version_server_dir())
             if self.config.force_download or not os.path.exists(self.config.game_version_server_jar_file_path()):
                 self.downloader.downloadPaperServerJarFile()
             jarFilePath = self.config.game_version_server_jar_file_path()
         elif self.config.isForge:
             self.config.getForgeInfo()
+            self.fs.ensure_dir(self.config.game_version_server_dir())
             if self.config.force_download or not os.path.exists(self.config.game_version_server_jar_file_path()):
                 self.buildForgeServer()
             jarFilePath = self.config.game_version_server_jar_file_path()
@@ -73,8 +81,10 @@ class Server:
                 jarFilePath = jarFilePath.replace(self.config.forgeInfo.fullVersion, self.config.forgeInfo.fullVersion + '-universal')
         else:
             print(ColorString.warn('Your choosed server is not exist!!!\nCurrently, there are three type server: pure/spigot/forge'))
-            return
+            return None
+        return jarFilePath
 
+    def launch_server(self, jarFilePath):
         jvm_opts = ' '.join([
             '-server',
             '-Xms' + self.config.mem_min,
@@ -84,7 +94,6 @@ class Server:
         if self.config.jar_opts:
             jarArgs = [self.config.jar_opts.replace('a:','')] + jarArgs
         self.startServer(self.startCommand(jvm_opts= jvm_opts, serverJARFilePath = jarFilePath, jarArgs = jarArgs))
-        print(ColorString.confirm('Start Server Successfully!!!'))
     
     def serverJARFilePath(self):
         '''服务端运行需要的JAR文件所在路径'''
@@ -125,6 +134,7 @@ class Server:
     def startServer(self, cmd):
         '''启动minecraft服务器'''
 
+        self.fs.ensure_dir(self.config.game_version_server_dir())
         os.chdir(self.config.game_version_server_dir())
 
         # 如果没有eula.txt文件，则启动服务器生成
@@ -181,6 +191,7 @@ class Server:
 
         version = self.config.version
         spigot = Spigot(version)
+        self.fs.ensure_dir(self.config.game_version_server_build_dir())
         self.downloader.download(
             spigot.build_tool_jar, 
             self.config.game_version_server_build_dir(), 
@@ -205,7 +216,8 @@ class Server:
     def buildForgeServer(self):
         '''构建Forge服务器'''
 
-        self.download(
+        self.fs.ensure_dir(self.config.game_version_server_dir())
+        self.downloader.download(
             self.config.forgeInfo.forge_installer_url, 
             self.config.game_version_server_dir(), 
             prefix_desc='forge installer jar file'
@@ -229,6 +241,7 @@ class Server:
         world_paths = self.config.game_version_server_world_dirs()
         if world_paths:            
             backup_path = self.config.game_version_server_world_backup_dir()
+            self.fs.ensure_dir(backup_path)
             now = time.localtime()
             fileName = '_'.join([time.strftime('%Y-%m-%dT%H:%M:%S', now), self.config.game_type, self.config.version]) + '.zip'
             world_backup_file = os.path.join(backup_path, fileName)
@@ -250,6 +263,7 @@ class Server:
     def symlink_server_core_files_if_need(self):
         '''为服务器核心文件创建符号链接到共享目录，方便版本升级'''
         if self.config.symlink:
+            self.fs.ensure_dir(self.config.game_version_server_symlink_source_dir())
             # 软链接需要涉及的文件和目录
             destinations = [
                 self.config.game_version_server_eula_file_path(),
@@ -258,6 +272,7 @@ class Server:
                 self.config.game_version_server_plugin_dir(),
                 self.config.game_version_server_whitelist_file_path(),
             ]
+            destinations = list(filter(lambda x: x != None, destinations))
             world_paths = self.config.game_version_server_world_dirs()
             if world_paths and len(world_paths) > 0:
                 destinations.extend(self.config.game_version_server_world_dirs())
@@ -266,28 +281,5 @@ class Server:
             for destination in destinations:
                 # 软链接需要链接的源文件或源目录
                 source = os.path.join(self.config.game_version_server_symlink_source_dir(),os.path.basename(destination))
-                # 如果软链接生成的目录下有同名的文件和目录，则取个备份用的名称
-                destination_backup = destination+'.before_symlink'
-
-                if not os.path.exists(source):
-                    if os.path.exists(destination):
-                        shutil.move(destination, source)
-                    else:
-                        # 之前有备份过的同名文件和目录，则恢复同名的文件和目录
-                        if os.path.exists(destination_backup):
-                            shutil.move(destination_backup, destination)
-                        continue
-
-                # 如果已经创建了软链接，则跳过不再创建
-                if os.path.islink(destination):
-                    target = os.readlink(destination)
-                    if os.path.normcase(target) == os.path.normcase(source):
-                        continue
-                
-                # 如果软链接生成的目录下有同名文件或目录，则先进行备份
-                if os.path.exists(destination):
-                    shutil.move(destination, destination_backup)
-                
-                # 生成软链接
-                os.symlink(source, destination, target_is_directory=os.path.isdir(source))
+                self.fs.ensure_symlink(source, destination)
                 print("%s -> %s" % (source, destination))

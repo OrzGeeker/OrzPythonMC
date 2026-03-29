@@ -9,15 +9,25 @@ from ..core.Forge import Forge
 from ..core.OptiFine import OptiFine
 from ..core.Fabric import Fabric
 from ..core.BMCLAPI import BMCLAPI
+from ..infra.http import HttpClient
+from ..infra.fs import FileStore
+from ..domain import resolve_libraries
 
 from tqdm import tqdm
-import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 import shutil
+import time
+import hashlib
 
 class Downloader:
 
     def __init__(self, config):
         self.config = config
+        self.http = HttpClient(timeout = 10)
+        self.fs = FileStore()
+        self.max_workers = max(8, min(32, (os.cpu_count() or 4) * 4))
+        self.chunk_size = 1024 * 1024
+        self._tuned = False
 
     def downloadGameJSON(self):
         '''Download Game Json Configure File'''
@@ -29,7 +39,8 @@ class Downloader:
         (url, hash) = Mojang.get_release_game_json(self.config.version)
         if not checkFileExist(version_json_path, hash):
             print("Download Game Json Configure File!")
-            jsonStr = requests.get(url).text
+            jsonStr = self.http.get(url).text
+            self.fs.ensure_dir(os.path.dirname(version_json_path))
             writeContentToFile(jsonStr, version_json_path)
         else: 
             print("Game Json Configure File have been downloaded!")
@@ -65,7 +76,8 @@ class Downloader:
         index_json_path= os.path.join(self.config.game_version_client_assets_indexs_dir(), os.path.basename(index_json_url))
         if not checkFileExist(index_json_path,index_json_sha1):
             print("Download assetIndex JSON File")
-            index_json_str = requests.get(index_json_url).text
+            index_json_str = self.http.get(index_json_url).text
+            self.fs.ensure_dir(os.path.dirname(index_json_path))
             with open(index_json_path,'w',encoding='utf-8') as f:
                 f.write(index_json_str)
         else:
@@ -74,30 +86,64 @@ class Downloader:
     def downloadAssetObjects(self):
         '''Download Game Asset Objects'''
         objects = self.config.game_version_json_assets_obj().get('objects')
-        total = len(objects)
-
-        index = 0
-        for (name,object) in objects.items():
-
-            if is_sigint_up():
-                return
-
-            index = index + 1
+        first_url = None
+        for (_, object) in objects.items():
             hash = object.get('hash')
             url = Mojang.assets_objects_url(hash)
             object_dir = self.config.game_version_client_assets_objects_dir(hash)
             object_filePath = os.path.join(object_dir,os.path.basename(url))
             if not checkFileExist(object_filePath, hash):
-                prefix_desc = 'assets objects %d/%d(%.2f%%)' % (index, total, 100.0 * index / total)
-                self.download(url,object_dir, prefix_desc=prefix_desc)
-            
-            # 收集ogg音乐文件
-            if self.config.is_extract_music:
+                first_url = url
+                break
+
+        if first_url:
+            self._ensure_tuned(first_url)
+            asset_workers = min(64, self.max_workers * 2)
+            with ThreadPoolExecutor(max_workers = asset_workers) as executor:
+                in_flight = set()
+                limit = asset_workers * 8
+                total = 0
+                for (_, object) in objects.items():
+                    hash = object.get('hash')
+                    url = Mojang.assets_objects_url(hash)
+                    object_dir = self.config.game_version_client_assets_objects_dir(hash)
+                    object_filePath = os.path.join(object_dir,os.path.basename(url))
+                    if not checkFileExist(object_filePath, hash):
+                        total += 1
+                progress = tqdm(total = total, unit = 'files', desc = 'assets')
+                for (_, object) in objects.items():
+                    if is_sigint_up():
+                        return
+                    hash = object.get('hash')
+                    url = Mojang.assets_objects_url(hash)
+                    object_dir = self.config.game_version_client_assets_objects_dir(hash)
+                    object_filePath = os.path.join(object_dir,os.path.basename(url))
+                    if checkFileExist(object_filePath, hash):
+                        continue
+                    while len(in_flight) >= limit:
+                        done, in_flight = wait(in_flight, return_when = FIRST_COMPLETED)
+                        for f in done:
+                            f.result()
+                            progress.update(1)
+                    in_flight.add(executor.submit(self.download, url, object_dir, None, None, False))
+                for f in as_completed(in_flight):
+                    f.result()
+                    progress.update(1)
+                progress.close()
+
+        if self.config.is_extract_music:
+            for (name, object) in objects.items():
                 path, type = os.path.splitext(name)
                 filename = path.replace(os.sep, '_') + '.mp3'
                 if type == '.ogg':
-                    target_file_path = os.path.join(self.config.game_version_client_mp3_dir(),filename)
-                    convertOggToMap3(object_filePath, target_file_path)
+                    hash = object.get('hash')
+                    url = Mojang.assets_objects_url(hash)
+                    object_dir = self.config.game_version_client_assets_objects_dir(hash)
+                    object_filePath = os.path.join(object_dir,os.path.basename(url))
+                    if os.path.exists(object_filePath):
+                        target_file_path = os.path.join(self.config.game_version_client_mp3_dir(),filename)
+                        self.fs.ensure_dir(os.path.dirname(target_file_path))
+                        convertOggToMap3(object_filePath, target_file_path)
 
         if self.config.is_extract_music:
             music_dir = os.path.dirname(self.config.game_version_client_mp3_dir())
@@ -106,67 +152,72 @@ class Downloader:
 
     def donwloadLibraries(self):
         ''' download libraries'''
-        libs = self.config.game_version_json_obj().get('libraries')
-        total = len(libs)
-
-        index = 0
-        for lib in libs: 
-
+        libs = resolve_libraries(self.config.game_version_json_obj(), platformType())
+        first_url = None
+        for lib in libs:
             if is_sigint_up():
                 return
-
-            index = index + 1
-            prefix_desc = 'libraries %d/%d' % (index, total)
-            downloads = lib.get('downloads')
-            rules = lib.get('rules')
-
-            isContinue = False
-            if None != rules:
-                for rule in rules:
-                    if None != rule:
-                        if rule.get('action') == 'disallow':
-                            if rule.get('os').get('name') == platformType():
-                                isContinue = True
-
-                        if rule.get('action') == 'allow':
-                            allow_os = rule.get('os')
-                            if allow_os and allow_os.get('name') != platformType():
-                                isContinue = True
-
-            if isContinue: 
-                continue
-
-            libPath = None
-            url = None
-            nativeKey = 'natives-'+ platformType()
-            if 'natives' in lib:
-                platform = lib.get('natives').get(platformType())
-                if platform == None:
-                    continue
-                else:
-                    libPath = downloads.get('classifiers').get(platform).get('path')
-                    url = downloads.get('classifiers').get(platform).get('url')
-                    sha1 = downloads.get('classifiers').get(platform).get('sha1')
-                    nativeFilePath = os.path.join(self.config.game_version_client_native_library_dir(),os.path.basename(url))
-                    if not checkFileExist(nativeFilePath,sha1):
-                        self.download(url,self.config.game_version_client_native_library_dir(), prefix_desc=prefix_desc)
-                    
+            url = lib.get('url')
+            sha1 = lib.get('sha1')
+            if lib.get('kind') == 'native':
+                nativeFilePath = os.path.join(self.config.game_version_client_native_library_dir(),os.path.basename(url))
+                if not checkFileExist(nativeFilePath,sha1):
+                    first_url = first_url or url
             else:
-                classifiers = downloads.get('classifiers')
-                if classifiers and nativeKey in downloads.get('classifiers'):
-                    url = downloads.get('classifiers').get(nativeKey).get('url')
-                    sha1 = downloads.get('classifiers').get(platform).get('sha1')
-                    nativeFilePath = os.path.join(self.config.game_version_client_native_library_dir(),os.path.basename(url))
-                    if not checkFileExist(nativeFilePath,sha1):
-                        self.download(url,self.config.game_version_client_native_library_dir(), prefix_desc=prefix_desc)
-                
-                libPath = downloads.get('artifact').get('path')
-                url = downloads.get('artifact').get('url')
-                sha1 = downloads.get('artifact').get('sha1')
+                libPath = lib.get('path')
                 fileDir = self.config.game_version_client_library_dir(libPath)
                 filePath=os.path.join(fileDir,os.path.basename(url))
                 if not checkFileExist(filePath,sha1):
-                    self.download(url,fileDir, prefix_desc=prefix_desc)
+                    first_url = first_url or url
+
+        if first_url:
+            self._ensure_tuned(first_url)
+            with ThreadPoolExecutor(max_workers = self.max_workers) as executor:
+                in_flight = set()
+                limit = self.max_workers * 8
+                total = 0
+                for lib in libs:
+                    url = lib.get('url')
+                    sha1 = lib.get('sha1')
+                    if lib.get('kind') == 'native':
+                        dir_path = self.config.game_version_client_native_library_dir()
+                        nativeFilePath = os.path.join(dir_path, os.path.basename(url))
+                        if not checkFileExist(nativeFilePath, sha1):
+                            total += 1
+                    else:
+                        libPath = lib.get('path')
+                        dir_path = self.config.game_version_client_library_dir(libPath)
+                        filePath = os.path.join(dir_path, os.path.basename(url))
+                        if not checkFileExist(filePath, sha1):
+                            total += 1
+                progress = tqdm(total = total, unit = 'files', desc = 'libraries')
+                for lib in libs:
+                    if is_sigint_up():
+                        return
+                    url = lib.get('url')
+                    sha1 = lib.get('sha1')
+                    if lib.get('kind') == 'native':
+                        dir_path = self.config.game_version_client_native_library_dir()
+                        nativeFilePath = os.path.join(dir_path, os.path.basename(url))
+                        if checkFileExist(nativeFilePath, sha1):
+                            continue
+                    else:
+                        libPath = lib.get('path')
+                        dir_path = self.config.game_version_client_library_dir(libPath)
+                        filePath = os.path.join(dir_path, os.path.basename(url))
+                        if checkFileExist(filePath, sha1):
+                            continue
+
+                    while len(in_flight) >= limit:
+                        done, in_flight = wait(in_flight, return_when = FIRST_COMPLETED)
+                        for f in done:
+                            f.result()
+                            progress.update(1)
+                    in_flight.add(executor.submit(self.download, url, dir_path, None, None, False))
+                for f in as_completed(in_flight):
+                    f.result()
+                    progress.update(1)
+                progress.close()
         
         self.downloadFabricLibraries()
 
@@ -193,15 +244,8 @@ class Downloader:
             )
 
 
-    retry_count = 0
-    MAX_RETRY_COUNT = 3
-    def download(self, url, dir, name = None, prefix_desc = None):
+    def download(self, url, dir, name = None, prefix_desc = None, use_progress = True, headers = None, cookies = None):
         '''通用下载方法'''
-        original_url = url
-        original_dir = dir
-        original_name = name
-        oritinal_prefix_desc = prefix_desc
-
         url = self.redirectUrl(url=url)
 
         if is_sigint_up():
@@ -212,55 +256,105 @@ class Downloader:
         else:
             filename = name
         
-        try:
-            # 临时文件中转目录
-            target_file = os.path.join(dir,filename)
-            download_temp_file = os.path.join(self.config.game_download_temp_dir(), filename)
-            
-            total_size = int(requests.head(url).headers["Content-Length"])
-            kb_chunk_size = 1024 # 单位: 1K
-            mb_chunk_size = 1024 * 1024 # 单位: 1M
-            
-            # 大于10M的通过流式下载
-            if total_size > 10 * mb_chunk_size:
-                mb_size = int(total_size / mb_chunk_size + 0.5)
-                res = requests.get(url, stream = True)
-                # 先下载到临时目录
-                with open(download_temp_file,'wb') as f:
-                    desc = ((prefix_desc + ' - ') if len(prefix_desc) > 0 else  '') + 'downloading: %s(%sMB)' % (filename, mb_size)
-                    for chunk in tqdm(iterable=res.iter_content(mb_chunk_size),total=mb_size,unit='MB',desc=desc):
-                        f.write(chunk)
+        attempts = 0
+        while attempts < 3:
+            attempts += 1
+            try:
+                target_file = os.path.join(dir,filename)
+                temp_key = hashlib.sha1(url.encode('utf-8')).hexdigest()
+                download_temp_file = os.path.join(self.config.game_download_temp_dir(), temp_key + '_' + filename)
+                self.fs.ensure_dir(dir)
+                self.fs.ensure_dir(self.config.game_download_temp_dir())
 
-                # 下载并写入临时目录后，移动到目标位置, 如果目标位置已存在文件，先删除
+                temp_size = os.path.getsize(download_temp_file) if os.path.exists(download_temp_file) else 0
+                range_headers = {}
+                if temp_size > 0:
+                    range_headers['Range'] = 'bytes=%d-' % temp_size
+                if headers:
+                    range_headers.update(headers)
+
+                res = self.http.get(url, stream = True, headers = range_headers if range_headers else headers, cookies = cookies)
+                if res.status_code >= 400:
+                    raise RuntimeError('download failed: %s' % res.status_code)
+
+                use_append = temp_size > 0 and res.status_code == 206
+                mode = 'ab' if use_append else 'wb'
+                total_for_progress = None
+                content_length = res.headers.get("Content-Length")
+                if content_length and content_length.isdigit():
+                    total_for_progress = int(content_length)
+                if use_progress:
+                    desc = ((prefix_desc + ' - ') if prefix_desc else  '') + 'downloading: %s' % filename
+                    progress = tqdm(total = total_for_progress, unit = 'B', unit_scale = True, desc = desc) if total_for_progress else None
+                else:
+                    progress = None
+
+                with open(download_temp_file, mode) as f:
+                    for chunk in res.iter_content(self.chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            if progress:
+                                progress.update(len(chunk))
+                res.close()
+
+                if progress:
+                    progress.close()
+
                 if os.path.exists(target_file):
                     os.remove(target_file)
-                # 移动临时文件到目标位置
                 shutil.move(download_temp_file, target_file)
-            else:
-                # 小于10M的直接下载到内存，然后转存
-                with open(target_file, 'wb') as f:
-                    f.write(requests.get(url).content)
-                kb_size = int(total_size / kb_chunk_size + 0.5)
-                desc = (prefix_desc + ' - ' if len(prefix_desc) > 0 else '') + ('%s(%sKB)' % (os.path.basename(url), kb_size))
-                print(desc)
+                return
+            except Exception as e:
+                print(e)
+                print(ColorString.error('download failed: %s' % url))
+                sleep(1)
+                if attempts >= 3:
+                    print(ColorString.error('retry 3 times and failed! jump to donwload next url'))
+                    return
 
-            # 下载成功，重置重试次数
-            if Downloader.retry_count > 0:
-                Downloader.retry_count = 0
+    def _ensure_tuned(self, test_url):
+        if self._tuned:
+            return
+        mbps = self._probe_mbps(test_url)
+        cpu = os.cpu_count() or 4
+        if mbps < 2:
+            workers = 8
+        elif mbps < 8:
+            workers = 16
+        elif mbps < 20:
+            workers = 32
+        else:
+            workers = 48
+        self.max_workers = min(64, max(8, min(workers, cpu * 8)))
+        if mbps > 30:
+            self.chunk_size = 4 * 1024 * 1024
+        elif mbps > 10:
+            self.chunk_size = 2 * 1024 * 1024
+        else:
+            self.chunk_size = 1024 * 1024
+        pool = max(64, self.max_workers * 4)
+        self.http = HttpClient(timeout = 10, pool_connections = pool, pool_maxsize = pool)
+        self._tuned = True
 
-        except Exception as e:
-            # 如果下载失败, 则提示
-            print(e)
-            print(ColorString.error('download failed: %s' % url))
-
-            sleep(1)
-            Downloader.retry_count += 1
-            if Downloader.retry_count <= Downloader.MAX_RETRY_COUNT:
-                print(ColorString.warn('[%s]retry download: %s' % (Downloader.retry_count, original_url)))
-                self.download(original_url, original_dir, original_name, oritinal_prefix_desc)
-            else:
-                print(ColorString.error('retry %s times and failed! jump to donwload next url' % Downloader.MAX_RETRY_COUNT))
-                Downloader.MAX_RETRY_COUNT = 0
+    def _probe_mbps(self, url, bytes_limit = 1024 * 1024):
+        start = time.perf_counter()
+        read_bytes = 0
+        headers = {'Range': 'bytes=0-%d' % (bytes_limit - 1)}
+        try:
+            res = self.http.get(url, stream = True, headers = headers)
+            for chunk in res.iter_content(64 * 1024):
+                if not chunk:
+                    continue
+                read_bytes += len(chunk)
+                if read_bytes >= bytes_limit:
+                    break
+            res.close()
+        except Exception:
+            return 0
+        elapsed = time.perf_counter() - start
+        if elapsed <= 0:
+            return 0
+        return (read_bytes / 1024.0 / 1024.0) / elapsed
 
     def redirectUrl(self,url):
 

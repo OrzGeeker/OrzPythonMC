@@ -3,6 +3,7 @@
 import os, json
 from ..utils.utils import *
 from ..core.Forge import Forge
+from ..domain import RuntimeOptions, PathLayout
 
 class Config:
     '''Public Definitions'''
@@ -24,20 +25,23 @@ class Config:
         if args.debug:
             print(args)
 
-        self.is_client = not args.server
-        self.version = args.version
-        self.username = args.username
-        self.mem_min = args.minmem
-        self.mem_max = args.maxmem
-        self.is_extract_music = args.extract_music
-        self.symlink = args.symlink
-        self.bmclapi = args.bmclapi
-        self.nginx = args.nginx
-        self.deamon = args.deamon
-        self.skin_system = args.skin_system
-        self.jar_opts = args.jar_opts
+        self.options = RuntimeOptions(args)
 
-        game_type = args.type
+        self.is_client = self.options.is_client
+        self.version = self.options.version
+        self.username = self.options.username
+        self.mem_min = self.options.mem_min
+        self.mem_max = self.options.mem_max
+        self.is_extract_music = self.options.is_extract_music
+        self.symlink = self.options.symlink
+        self.bmclapi = self.options.bmclapi
+        self.nginx = self.options.nginx
+        self.deamon = self.options.deamon
+        self.skin_system = self.options.skin_system
+        self.jar_opts = self.options.jar_opts
+        self.yes = self.options.yes
+
+        game_type = self.options.type
         self.isPure = (game_type == Config.GAME_TYPE_PURE)
         self.isSpigot = (game_type == Config.GAME_TYPE_SPIGOT)
         self.isForge = (game_type == Config.GAME_TYPE_FORGE)
@@ -53,13 +57,18 @@ class Config:
         else:
             self.game_type = ''
 
-        self.debug = args.debug
-        self.force_upgrade = args.force_upgrade_world
-        self.backup = args.backup_world
-        self.optifine = args.optifine
-        self.fabric = args.fabric
-        self.api = args.api
-        self.force_download = args.force_download
+        self.debug = self.options.debug
+        self.force_upgrade = self.options.force_upgrade
+        self.backup = self.options.backup
+        self.optifine = self.options.optifine
+        self.fabric = self.options.fabric
+        self.api = self.options.api
+        self.force_download = self.options.force_download
+        self.paths = PathLayout(Config.BASE_PATH, self.version, self.game_type)
+
+    def set_version(self, version):
+        self.version = version
+        self.paths.version = version
 
     def getForgeInfo(self):
         if self.isForge:
@@ -73,63 +82,40 @@ class Config:
     @classmethod
     def game_root_dir(cls):
         '''Game Root Dir'''
-        makedirs(Config.GAME_ROOT_DIR)
         return Config.GAME_ROOT_DIR
 
     def game_versions_dir(self):
         '''Game Versions Dir'''
-        makedirs(Config.GAME_VERSIONS_DIR)
-        return Config.GAME_VERSIONS_DIR
+        return self.paths.game_versions_dir()
 
     def game_version_dir(self):
         '''Version Related Directory'''
-        version_dir = os.path.join(self.game_versions_dir(),self.version)
-        makedirs(version_dir)
-        return version_dir
+        return self.paths.game_version_dir()
 
     ### Client
     def game_version_client_dir(self):
-        client_dir = os.path.join(self.game_version_dir(), 'client', Config.GAME_TYPE_PURE)
-        makedirs(client_dir)
-        return client_dir
+        return self.paths.game_version_client_dir()
 
     def game_version_client_assets_dir(self):
-        assets_root_dir = os.path.join(self.game_version_client_dir(), 'assets')
-        makedirs(assets_root_dir)
-        return assets_root_dir
+        return self.paths.game_version_client_assets_dir()
 
     def game_version_client_assets_indexs_dir(self):
-        assets_indexs_dir = os.path.join(self.game_version_client_assets_dir(), 'indexes')
-        makedirs(assets_indexs_dir)
-        return assets_indexs_dir
+        return self.paths.game_version_client_assets_indexs_dir()
 
     def game_version_client_assets_objects_dir(self, hash):
-        assets_objects_dir = os.path.join(self.game_version_client_assets_dir(), 'objects', hash[0:2])
-        makedirs(assets_objects_dir)
-        return assets_objects_dir
+        return self.paths.game_version_client_assets_objects_dir(hash)
 
     def game_version_client_library_dir(self, subpath = None):
-        lib_dir = os.path.join(self.game_version_client_dir(), 'libraries')
-        if None != subpath:
-            subdir =  os.path.dirname(subpath)
-            lib_dir = os.path.join(lib_dir,subdir)
-        makedirs(lib_dir)
-        return lib_dir
+        return self.paths.game_version_client_library_dir(subpath)
     
     def game_version_client_versions_dir(self):
-        dir = os.path.join(self.game_version_client_dir(),'versions')
-        makedirs(dir)
-        return dir
+        return self.paths.game_version_client_versions_dir()
 
     def game_version_client_versions_version_dir(self):
-        dir = os.path.join(self.game_version_client_versions_dir(), self.version)
-        makedirs(dir)
-        return dir
+        return self.paths.game_version_client_versions_version_dir()
 
     def game_version_client_native_library_dir(self):
-        native_lib_dir = os.path.join(self.game_version_client_versions_version_dir(), self.version + '-natives')
-        makedirs(native_lib_dir)
-        return native_lib_dir
+        return self.paths.game_version_client_native_library_dir()
 
     def game_version_json_file_path(self):
         return os.path.join(self.game_version_client_versions_version_dir(), self.version + '.json')
@@ -158,9 +144,7 @@ class Config:
 
     ### Server
     def game_version_server_dir(self):
-        server_dir = os.path.join(self.game_version_dir(), 'server', self.game_type)
-        makedirs(server_dir)
-        return server_dir
+        return self.paths.game_version_server_dir()
 
     def game_version_server_jar_filename(self):
         if self.isForge:
@@ -191,9 +175,7 @@ class Config:
         return os.path.join(self.game_version_server_dir(), 'whitelist.json')
 
     def game_version_server_build_dir(self):
-        build_path = os.path.join(self.game_version_server_dir(), 'build')
-        makedirs(build_path)
-        return build_path
+        return self.paths.game_version_server_build_dir()
     
     def game_version_server_world_dirs(self):
         worldName = 'world'
@@ -234,55 +216,37 @@ class Config:
         return os.path.join(self.game_version_server_dir(),'plugins') if self.isPaper else None
 
     def game_version_server_world_backup_dir(self):
-        game_world_backup_dir = os.path.join(Config.game_ftp_server_base_dir(), 'game_backup')
-        makedirs(game_world_backup_dir)
-        return game_world_backup_dir
+        return self.paths.game_version_server_world_backup_dir()
     
     def game_version_server_symlink_source_dir(self):
-        symlink_destination_dir = Config.game_ftp_server_core_data_backup_dir()
-        makedirs(symlink_destination_dir)
-        return symlink_destination_dir
+        return self.paths.game_version_server_symlink_source_dir()
 
     def game_version_client_mp3_dir(self):
-        mp3_dir = os.path.join(Config.game_ftp_server_base_dir(),'client_music', self.version)
-        makedirs(mp3_dir)
-        return mp3_dir
+        return self.paths.game_version_client_mp3_dir()
         
     def game_download_temp_dir(self):
-        download_temp_dir = os.path.join(Config.GAME_ROOT_DIR, 'download_tmp_dir')
-        makedirs(download_temp_dir)
-        return download_temp_dir
+        return self.paths.game_download_temp_dir()
 
     @classmethod
     def game_ftp_server_base_dir(cls):
-        ftp_base_dir = os.path.join(Config.BASE_PATH, 'minecraft_world_backup')
-        makedirs(ftp_base_dir)
-        return ftp_base_dir
+        return os.path.join(Config.BASE_PATH, 'minecraft_world_backup')
         
     @classmethod
     def game_ftp_server_core_data_backup_dir(cls):
-        server_core_data_backup_dir = os.path.join(Config.game_ftp_server_base_dir(),'mcserver')
-        makedirs(server_core_data_backup_dir)
-        return server_core_data_backup_dir
+        return os.path.join(Config.game_ftp_server_base_dir(),'mcserver')
 
     @classmethod
     def game_ftp_server_core_data_plugin_dir(cls):
-        plugins_dir = os.path.join(Config.game_ftp_server_core_data_backup_dir(), 'plugins')
-        makedirs(plugins_dir)
-        return plugins_dir
+        return os.path.join(Config.game_ftp_server_core_data_backup_dir(), 'plugins')
 
     @classmethod
     def game_config_dir(cls):
-        game_config_dir = os.path.join(Config.GAME_ROOT_DIR, 'configurations')
-        makedirs(game_config_dir)
-        return game_config_dir
+        return os.path.join(Config.GAME_ROOT_DIR, 'configurations')
 
     @classmethod
     def game_version_server_nginx_file_path(cls):
-        nginx_conf_file_path = os.path.join(Config.game_config_dir(),'nginx_minecraft.conf')
-        return nginx_conf_file_path
+        return os.path.join(Config.game_config_dir(),'nginx_minecraft.conf')
 
     @classmethod
     def game_version_server_systemctl_conf_file_path(cls):
-        systemctl_conf_file_path = os.path.join(Config.game_config_dir(),'minecraft.service')
-        return systemctl_conf_file_path
+        return os.path.join(Config.game_config_dir(),'minecraft.service')

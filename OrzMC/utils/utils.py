@@ -33,9 +33,11 @@ def checkFileExist(filePath, hash):
 def computeHash(filePath):
     if not os.path.exists(filePath):
         return None
+    sha1 = hashlib.sha1()
     with open(filePath, 'rb') as f:
-        computeHash = hashlib.sha1(f.read()).hexdigest()
-        return computeHash
+        for chunk in iter(lambda: f.read(1024 * 1024), b''):
+            sha1.update(chunk)
+    return sha1.hexdigest()
 
 def writeContentToFile(content, filePath):
         if content != None:

@@ -5,6 +5,7 @@ from .Config import Config
 from .Game import Game
 from .Constants import ORZMC_VERSION_NUMBER_STR, BMCLAPI_DESC
 from ..utils.RichText import RichText
+from ..utils.CleanUp import CleanUp
 
 def print_info(args):
     '''打印工具版本号'''
@@ -68,6 +69,7 @@ def parse_args():
     parser.add_argument('-M','--fabric', default=False, action='store_true', help='if you have installed fabric for client, you can add this option to launch client with fabric be activated')
     # extra jar options
     parser.add_argument('-E','--extra_jar_options', metavar = 'jar_opts', dest='jar_opts', help = 'inject extra jar options when run, begin with a: prefix, e.g. --E "a:--help"')
+    parser.add_argument('--yes', dest='yes', default=False, action='store_true', help='confirm system operations without dry-run')
 
     args = parser.parse_args()
     return args
@@ -77,6 +79,7 @@ def start():
     # 富文本显示调试信息
     RichText.better_debug()
     RichText.dev_test()
+    CleanUp.enable()
 
     # 控制台收集的参数传入Config对象进行初始化
     args = parse_args()

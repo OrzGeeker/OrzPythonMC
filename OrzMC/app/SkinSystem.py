@@ -5,6 +5,7 @@ import subprocess
 import shutil
 from .Config import Config
 import yaml
+from ..infra.runner import CommandRunner
 
 class SkinSystem:
     @classmethod
@@ -16,7 +17,7 @@ class SkinSystem:
             return None
 
     @classmethod
-    def setup(cls):
+    def setup(cls, config):
         tools = [
             'mysql-server',
             'nginx',
@@ -26,6 +27,13 @@ class SkinSystem:
             'php-gd',
             'git'
         ]
+        if not config.yes:
+            print(ColorString.hint('Dry-run: skinsystem setup will be executed with --yes'))
+            print(ColorString.hint('Will install: %s' % ','.join(tools)))
+            print(ColorString.hint('Will clone SkinSystem into /var/www'))
+            print(ColorString.hint('Will configure MySQL user and SkinRestorer config'))
+            return
+        runner = CommandRunner()
         print(ColorString.hint("installing skinsystem (%s)" % ColorString.warn(','.join(tools))))
         bins = ' '.join(tools)
         skin_system_repo_url = 'https://github.com/OrzGeeker/SkinSystem'
@@ -34,7 +42,7 @@ class SkinSystem:
         skin_system_web_absolute_dir = os.path.join(web_site_dir, skin_system_dir)
         if os.path.exists(skin_system_web_absolute_dir):
             cmd = f'sudo rm -rf {skin_system_web_absolute_dir}'
-            os.system(cmd)
+            runner.run(cmd)
         cmd = f'sudo apt-get update || sudo apt-get install {bins} -y && '\
         f'cd {web_site_dir} && sudo git clone {skin_system_repo_url} && cd {skin_system_dir} && '\
         f'sudo git checkout `git tag | sort -V | grep -v "\\-rc" | tail -1` && '\
@@ -42,10 +50,10 @@ class SkinSystem:
         f'sudo chmod 775 -R {skin_system_web_absolute_dir} && sudo chown -R www-data:www-data {skin_system_web_absolute_dir}'
 
         # mysql创建库表及用户
-        if os.system(cmd) == 0:
+        if runner.run(cmd).code == 0:
             mysql_user = 'skinsystem'
             mysql_database = 'skinsrestorer'
-            password = os.popen('head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13').read().strip()
+            password = runner.read('head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13')
             mysql_host = 'localhost'
             mysql_port = 3306
             enable_mysql = True
