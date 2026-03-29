@@ -2,9 +2,7 @@
 from .Config import Config
 from ..core.Mojang import Mojang
 from .Constants import *
-from ..utils.utils import hint
 from ..utils.RichText import RichText
-from ..utils.ColorString import ColorString
 
 import os
 import json
@@ -33,7 +31,7 @@ class Console:
         
         releaseVersions = Mojang.get_release_version_id_list(update = True)
         if not releaseVersions or len(releaseVersions) == 0:
-            print(ColorString.error('No supported versions fetched'))
+            RichText.error('No supported versions fetched')
             exit(-1)
         releaseVersions = releaseVersions[0:releaseVersions.index('1.13')+1]
         column = 6
@@ -45,21 +43,13 @@ class Console:
         if len(releaseVersions) > 0:
             self.config.set_version(releaseVersions[0])
 
-        select = hint(SELECT_VERSION_HINT % ('deploy' if not self.config.is_client else 'play' , DEFAULT_VERSION_HINT % self.config.version))
-
-        if len(select) > 0:
-            found = False
-            for releaseVersion in releaseVersions: 
-                if releaseVersion == select.strip():
-                    found = True
-                    self.config.set_version(releaseVersion)
-                    print(CHOOSED_VERSION % self.config.version)
-            if not found:
-                print(NOT_FOUND_VERSION)
-        else:
-            print(CHOOSED_DEFAULT_VERSION % self.config.version)
-
-        print('\n')
+        while True:
+            select = RichText.prompt('选择版本号', default = self.config.version)
+            if select in releaseVersions:
+                self.config.set_version(select)
+                RichText.info('You choose the version: %s' % self.config.version)
+                break
+            RichText.warn('There is no such a release version game, Please try again!')
     
     def showUserName(self):
         '''控制台交互输入玩家用户名'''
@@ -68,15 +58,8 @@ class Console:
         if not self.config.is_client:
             return 
 
-        u = hint(CHOOSE_USERNAME_HINT % self.config.username)
-
-        if len(u) > 0:
-            self.config.username = u
-            print(CHOOSED_USERNAME % self.config.username)
-        else:
-            print(CHOOSED_DEFAULT_USERNAME)
-
-        print('\n')
+        self.config.username = RichText.prompt('输入用户名', default = self.config.username)
+        RichText.info('You username in game is: %s' % self.config.username)
 
 
     def selectLauncherProfile(self):
@@ -93,33 +76,19 @@ class Console:
             with open(launcher_profiles_json_file_path, 'r') as f:
                 content = json.load(f)
                 profiles = content.get('profiles', None)
-                count = len(profiles)
+                count = len(profiles) if profiles else 0
                 if count > 0:
-                    print(ColorString.warn("There are those profiles you can choose to launch: "))
-                    index = 0
-                    selectedIndex = 0
-                    keys = profiles.keys()
-                    for key in keys:
-                        index = index + 1
-                        if key == content['selectedProfile']:
-                            selectedIndex = index
-                        isSelected = '*' if key == content['selectedProfile'] else ' '
-                        print(ColorString.hint('\t%s %s. %s' % (isSelected, index, key)))
+                    keys = list(profiles.keys())
+                    selected_key = content.get('selectedProfile')
+                    selectedIndex = (keys.index(selected_key) + 1) if selected_key in keys else 1
+                    for i, key in enumerate(keys, start = 1):
+                        prefix = '*' if i == selectedIndex else ' '
+                        RichText.console.print('%s %d. %s' % (prefix, i, key))
 
-                    options = "[1 - %s] " % count if count > 1 else ""
-                    try:
-                        input = hint(ColorString.warn("Which one you choose %s: " % options))
-                        which = int(input) if input and len(input) > 0 else selectedIndex
-                        if which >= 1 and which <= count:
-                            selected_key = list(keys)[which - 1]
-                            self.config.lastVersionId = profiles.get(selected_key).get('lastVersionId')
-                            content['selectedProfile'] = selected_key
-                        else: 
-                            print(ColorString.error("There is no option you specified!"))
-                            exit(-1)
-                    except:
-                        print(ColorString.error("There is no option you specified!"))
-                        exit(-1)
+                    which = RichText.prompt('选择启动配置', choices = [str(i) for i in range(1, count + 1)], default = str(selectedIndex))
+                    selected_key = keys[int(which) - 1]
+                    self.config.lastVersionId = profiles.get(selected_key).get('lastVersionId')
+                    content['selectedProfile'] = selected_key
 
             if content != None: 
                 with open(launcher_profiles_json_file_path, 'w') as f: 

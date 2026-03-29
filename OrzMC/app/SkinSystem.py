@@ -1,5 +1,5 @@
 # -*- coding: utf8 -*-
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 import os
 import subprocess
 import shutil
@@ -28,13 +28,13 @@ class SkinSystem:
             'git'
         ]
         if not config.yes:
-            print(ColorString.hint('Dry-run: skinsystem setup will be executed with --yes'))
-            print(ColorString.hint('Will install: %s' % ','.join(tools)))
-            print(ColorString.hint('Will clone SkinSystem into /var/www'))
-            print(ColorString.hint('Will configure MySQL user and SkinRestorer config'))
+            RichText.info('Dry-run: skinsystem setup will be executed with --yes')
+            RichText.info('Will install: %s' % ','.join(tools))
+            RichText.info('Will clone SkinSystem into /var/www')
+            RichText.info('Will configure MySQL user and SkinRestorer config')
             return
         runner = CommandRunner()
-        print(ColorString.hint("installing skinsystem (%s)" % ColorString.warn(','.join(tools))))
+        RichText.info("installing skinsystem (%s)" % ','.join(tools))
         bins = ' '.join(tools)
         skin_system_repo_url = 'https://github.com/OrzGeeker/SkinSystem'
         skin_system_dir = os.path.basename(skin_system_repo_url)
@@ -58,7 +58,7 @@ class SkinSystem:
             mysql_port = 3306
             enable_mysql = True
 
-            print(ColorString.hint(f'Creating MySQL user {mysql_user}:%s' % password))
+            RichText.info(f'Creating MySQL user {mysql_user}:%s' % password)
             sql = f"DELETE FROM mysql.user WHERE user = '{mysql_user}';"\
             f"DROP USER IF EXISTS '{mysql_user}'@'{mysql_host}';"\
             f"FLUSH PRIVILEGES;"\
@@ -70,8 +70,8 @@ class SkinSystem:
                 sql_cmd_echo = subprocess.Popen(["echo", f"{sql}"], stdout=subprocess.PIPE)
                 sql_create_db = subprocess.Popen(['sudo', 'mysql'], stdin=sql_cmd_echo.stdout, stdout=subprocess.PIPE)
                 sql_create_db.communicate()
-                print(ColorString.confirm(f"MySQL user skinsystem:{password} was created"))
-                print(ColorString.confirm("Have a nice day, remember to save your credensudotials!")) 
+                RichText.success(f"MySQL user skinsystem:{password} was created")
+                RichText.success("Have a nice day, remember to save your credensudotials!") 
 
                 # 写入 SkinRestorer 插件配置文件中
                 sr_config_file_path = SkinSystem.skin_restorer_plugin_config_file_path()
@@ -86,7 +86,7 @@ class SkinSystem:
                         sr_config['MySQL']['Password'] = password
                     with open(sr_config_file_path, 'w', encoding = 'utf-8') as cfg:
                         yaml.dump(sr_config, cfg)
-                    print(ColorString.confirm('Skin Restorer config.yml write successfully!'))
+                    RichText.success('Skin Restorer config.yml write successfully!')
             except Exception as e:
                 print(e)
             

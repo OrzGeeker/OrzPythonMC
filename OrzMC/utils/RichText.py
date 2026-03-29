@@ -40,9 +40,10 @@ class RichText:
         pass
 
     theme = Theme({
-        'info': 'green bold',
+        'info': 'cyan bold',
         'warning': 'yellow bold',
         'error': 'red bold',
+        'success': 'green bold',
     })
 
     console = Console(theme=theme)
@@ -65,8 +66,16 @@ class RichText:
         RichText.console.print(text, style='error')
 
     @classmethod
+    def success(cls, text):
+        RichText.console.print(text, style='success')
+
+    @classmethod
     def prompt(cls, text, choices=None, default=None):
         return Prompt.ask(text, choices=choices, default=default)
+
+    @classmethod
+    def input(cls, text):
+        return RichText.console.input(text)
 
     @classmethod
     def table(cls, title, table_data, caption = None):

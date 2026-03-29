@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 from .Config import Config
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..infra.runner import CommandRunner
 from ..infra.fs import FileStore
 import os
@@ -11,10 +11,10 @@ class Nginx:
         '''配置并启动nginx'''
         nginx_config_file = Config.game_version_server_nginx_file_path()
         if not config.yes:
-            print(ColorString.hint('Dry-run: nginx setup will be executed with --yes'))
-            print(ColorString.hint('Will write config: %s' % nginx_config_file))
-            print(ColorString.hint('Will link to /etc/nginx/conf.d and reload/start nginx'))
-            print(ColorString.hint('Will run certbot nginx https setup'))
+            RichText.info('Dry-run: nginx setup will be executed with --yes')
+            RichText.info('Will write config: %s' % nginx_config_file)
+            RichText.info('Will link to /etc/nginx/conf.d and reload/start nginx')
+            RichText.info('Will run certbot nginx https setup')
             return
         try:
             runner = CommandRunner()
@@ -29,7 +29,7 @@ class Nginx:
                     Nginx.web_skin_system_conf(),
                     Nginx.web_mc_client(),
                 ])))
-                print(ColorString.confirm('Nginx conf file location: %s' % nginx_config_file))
+                RichText.success('Nginx conf file location: %s' % nginx_config_file)
             
             # 创建nginx配置文件软链接
             nginx_conf_dir = '/etc/nginx/conf.d'
@@ -38,7 +38,7 @@ class Nginx:
                 cmd = 'sudo ln -snf %s %s' % (nginx_config_file, minecraft_nginx_conf_file)
                 ret = runner.run(cmd).code
                 if ret == 0:
-                    print(ColorString.confirm('Create symbol link file: %s' % minecraft_nginx_conf_file))
+                    RichText.success('Create symbol link file: %s' % minecraft_nginx_conf_file)
 
                 nginx_process_number = int(runner.read('ps -ef | grep nginx | grep -v grep | wc -l') or '0')
                 cmd = None
@@ -50,14 +50,14 @@ class Nginx:
                 if cmd:
                     ret = runner.run(cmd).code
                     if ret == 0:
-                        print(ColorString.confirm('minecraft nginx config successfully!'))
+                        RichText.success('minecraft nginx config successfully!')
                     else:
-                        print(ColorString.error('minecraft nginx config failed!'))
+                        RichText.error('minecraft nginx config failed!')
                 # 配置HTTPS
                 Nginx.setupSSL()
         except Exception as e:
             print(e)
-            print(ColorString.error('Config Nginx for Minecraft Failed!!!'))
+            RichText.error('Config Nginx for Minecraft Failed!!!')
             exit(-1)
 
     @classmethod
@@ -72,9 +72,9 @@ class Nginx:
         'sudo apt-get install -y certbot python3-certbot-nginx &&'\
         'sudo certbot --nginx'
         if CommandRunner().run(cmd).code == 0:
-            print(ColorString.confirm('Config HTTPS successfully!'))
+            RichText.success('Config HTTPS successfully!')
         else:
-            print(ColorString.error("Config HTTPS failed!"))
+            RichText.error("Config HTTPS failed!")
 
     @classmethod
     def proxy_server_conf(cls, server_domain, upstream_url, port = 80, extra_headers = None):
@@ -133,7 +133,7 @@ server {{
         server_domain = 'skin.jokerhub.cn'
         php_fpm_bin_path = CommandRunner().read("whereis php-fpm | cut -d ' ' -f 2")
         if not os.path.exists(php_fpm_bin_path):
-            print(ColorString.error('You have not install php environment!!!'))
+            RichText.error('You have not install php environment!!!')
             return None
         php_fpm_version = os.path.basename(php_fpm_bin_path).replace('php-fpm','')
         fastcgi_pass = f'unix:/run/php/php{php_fpm_version}-fpm.sock'

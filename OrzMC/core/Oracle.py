@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 from ..utils.utils import platformType
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 import requests
 import os
 from tqdm import tqdm
@@ -34,10 +34,10 @@ class Oracle:
             try:
                 Oracle.download_jdk()  
                 if not Oracle.execute_install_jdk():
-                    print(ColorString.warn('Install JDK Failed!'))
+                    RichText.warn('Install JDK Failed!')
                     exit(0)
                 else:
-                    input(ColorString.hint('Press Enter to continue...'))
+                    RichText.input('Press Enter to continue...')
             except Exception as e:
                 print(e)
             finally:
@@ -91,8 +91,8 @@ class Oracle:
         return Oracle.execute_commands(Oracle.commands().get(platformType()).get('uninstall'))
 
     @classmethod
-    def execute_commands(cls, cmds, hint = ColorString.hint('May be you should input the user password to continue')):
-        print(hint)
+    def execute_commands(cls, cmds, hint = 'May be you should input the user password to continue'):
+        RichText.info(hint)
         if isinstance(cmds, list):
             ret = True
             for cmd in cmds:

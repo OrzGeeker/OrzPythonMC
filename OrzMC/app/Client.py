@@ -2,7 +2,7 @@
 from .Config import Config
 from .Downloader import Downloader
 from ..utils.utils import *
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..core.OptiFine import OptiFine
 from ..core.Fabric import Fabric
 from ..infra.fs import FileStore
@@ -42,7 +42,7 @@ class Client:
             if not os.path.exists(self.config.game_version_client_jar_file_path()) or not os.path.exists(self.config.game_version_forge_json_file_path()):
                 self.extractForgeClient()
         else:
-            ColorString.warn('Not Known Client!!!!')
+            RichText.warn('Not Known Client!!!!')
 
     def launch_client(self):
         if not self.config.is_client:
@@ -62,7 +62,7 @@ class Client:
         self.fs.ensure_dir(self.config.game_version_client_dir())
         os.chdir(self.config.game_version_client_dir())
         os.system(backgroundCmd)
-        print(ColorString.confirm('Start Client Successfully!!!'))
+        RichText.success('Start Client Successfully!!!')
         self.formatOutputClientCmd(backgroundCmd)
 
     '''如果是调试模式，则输出命令行指令内容'''
@@ -154,7 +154,7 @@ class Client:
             java_path = '\"' + java_path + '\"'
 
         if len(java_path) <= 0:
-            ColorString.error('You should installl JDK to run Minecraft')
+            RichText.error('You should installl JDK to run Minecraft')
             exit(-1)
 
         java_path = 'java'
@@ -279,11 +279,11 @@ class Client:
         installerJarFilePath = os.path.basename(self.config.forgeInfo.forge_installer_url)
         extractForgeClientCmd = 'java -jar ' + installerJarFilePath
 
-        print(ColorString.warn('Start install the forge client jar file ...'))
+        RichText.warn('Start install the forge client jar file ...')
         self.fs.ensure_dir(self.config.game_version_client_dir())
         os.chdir(self.config.game_version_client_dir())
         os.system(extractForgeClientCmd)
-        print(ColorString.confirm('Completed! And the forge client file generated!'))
+        RichText.success('Completed! And the forge client file generated!')
 
         forge_client_versions_dir = os.path.join(self.config.game_version_client_dir(), 'versions')
         pure_client_jar = os.path.join(forge_client_versions_dir, self.config.version, self.config.version + '.jar')

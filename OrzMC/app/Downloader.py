@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 from json import decoder
 from ..utils.utils import *
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..core.PaperAPI import PaperAPI
 from ..core.Mojang import Mojang
 from ..core.Spigot import Spigot
@@ -147,7 +147,7 @@ class Downloader:
 
         if self.config.is_extract_music:
             music_dir = os.path.dirname(self.config.game_version_client_mp3_dir())
-            print(ColorString.confirm('music has been extracted to dir: %s' % music_dir))
+            RichText.success('music has been extracted to dir: %s' % music_dir)
             exit(0)
 
     def donwloadLibraries(self):
@@ -306,10 +306,10 @@ class Downloader:
                 return
             except Exception as e:
                 print(e)
-                print(ColorString.error('download failed: %s' % url))
+                RichText.error('download failed: %s' % url)
                 sleep(1)
                 if attempts >= 3:
-                    print(ColorString.error('retry 3 times and failed! jump to donwload next url'))
+                    RichText.error('retry 3 times and failed! jump to donwload next url')
                     return
 
     def _ensure_tuned(self, test_url):

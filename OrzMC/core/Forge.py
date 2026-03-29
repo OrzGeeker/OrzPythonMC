@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 from bs4 import BeautifulSoup
 import os, requests
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 
 class Forge:
 
@@ -10,7 +10,7 @@ class Forge:
         self.fullVersion = None
         self.briefVersion = None
         self.version_homePage = 'https://files.minecraftforge.net/maven/net/minecraftforge/forge/index_%s.html' % self.version
-        print(ColorString.warn('parsing the forge installer download link...'))
+        RichText.info('parsing the forge installer download link...')
         html = requests.get(self.version_homePage).text
         soup = BeautifulSoup(html, 'html.parser')
         installer = list(map(lambda i: i.parent.get('href'), soup.select('.classifier-installer')))[0]
@@ -18,9 +18,8 @@ class Forge:
             self.forge_installer_url = installer.split('&')[1].split('=')[1]
             self.fullVersion = '-'.join(os.path.basename(self.forge_installer_url).split('-')[0:-1])
             self.briefVersion = '-'.join(self.fullVersion.split('-')[0::2])
-            print(ColorString.confirm('Get the forge installer download link!!'))
+            RichText.success('Get the forge installer download link!!')
         else:
-            print(ColorString.error( 'Not Found Any Installer!!!!'))
+            RichText.error('Not Found Any Installer!!!!')
 
             
-

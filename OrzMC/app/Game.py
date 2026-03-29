@@ -5,7 +5,7 @@ from .Console import Console
 from .usecases import ClientUseCase, ServerUseCase
 
 from ..utils.utils import *
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..core.Oracle import Oracle
 from .Downloader import Downloader
 
@@ -33,4 +33,4 @@ class Game:
                 
             except Exception as e:
                 print(e)
-                print(ColorString.warn('Start Failed!!!'))
+                RichText.warn('Start Failed!!!')

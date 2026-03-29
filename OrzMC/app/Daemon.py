@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 import os
 from .Config import Config
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..infra.runner import CommandRunner
 from ..infra.fs import FileStore
 
@@ -13,9 +13,9 @@ class Daemon:
 
         if not config.yes:
             systemctl_conf_file_path = Config.game_version_server_systemctl_conf_file_path()
-            print(ColorString.hint('Dry-run: systemd setup will be executed with --yes'))
-            print(ColorString.hint('Will write service file: %s' % systemctl_conf_file_path))
-            print(ColorString.hint('Will link to /etc/systemd/system and reload/enable/restart service'))
+            RichText.info('Dry-run: systemd setup will be executed with --yes')
+            RichText.info('Will write service file: %s' % systemctl_conf_file_path)
+            RichText.info('Will link to /etc/systemd/system and reload/enable/restart service')
             return
 
         daemon_name = 'Joker Minecraft Server'
@@ -63,7 +63,7 @@ WantedBy=multi-user.target
             FileStore().ensure_dir(os.path.dirname(systemctl_conf_file_path))
             with open(systemctl_conf_file_path,'w',encoding='utf-8') as cfg:
                 cfg.write(systemctl_daemon_conf)
-                print(ColorString.confirm('minecraft.service has been writen in location: %s' % systemctl_conf_file_path))
+                RichText.success('minecraft.service has been writen in location: %s' % systemctl_conf_file_path)
 
             systemctl_system_dir = '/etc/systemd/system'
             minecraft_systemctl_conf_filename = os.path.basename(systemctl_conf_file_path)
@@ -76,9 +76,9 @@ WantedBy=multi-user.target
                 )
                 ret = runner.run(cmd).code
                 if ret == 0:
-                    print(ColorString.confirm('started service: %s' % minecraft_systemctl_conf_filename))
+                    RichText.success('started service: %s' % minecraft_systemctl_conf_filename)
         except Exception as e:
             print(e)
-            print(ColorString.error('minecraft daemon configuration for systemctl failed!'))
+            RichText.error('minecraft daemon configuration for systemctl failed!')
 
         

@@ -2,7 +2,6 @@
 
 from ..app.Config import Config
 from ..utils.utils import makedirs
-from ..utils.ColorString import ColorString
 from ..utils.RichText import RichText
 
 import requests

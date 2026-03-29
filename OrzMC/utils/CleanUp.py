@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 import signal
 from .utils import platformType
-from .ColorString import ColorString
+from .RichText import RichText
 
 class CleanUp:
 
@@ -29,7 +29,7 @@ class CleanUp:
     @classmethod
     def sigint_handler(cls, signum, frame):
         CleanUp.is_sigint_up = True
-        print(ColorString.warn("\nForce Exit!"))
+        RichText.warn("\nForce Exit!")
         CleanUp.executeCleanTask()
         exit(-1)
 

@@ -6,7 +6,7 @@ from .Downloader import Downloader
 from .Nginx import Nginx
 from .Daemon import Daemon
 from .SkinSystem import SkinSystem
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..utils.RichText import RichText
 from ..utils.CleanUp import CleanUp
 from ..utils.utils import *
@@ -36,7 +36,7 @@ class Server:
         jarFilePath = self.prepare_server()
         if jarFilePath:
             self.launch_server(jarFilePath)
-            print(ColorString.confirm('Start Server Successfully!!!'))
+            RichText.success('Start Server Successfully!!!')
 
     def run_management_tasks(self):
         is_return = False
@@ -80,7 +80,7 @@ class Server:
             if not os.path.exists(jarFilePath):
                 jarFilePath = jarFilePath.replace(self.config.forgeInfo.fullVersion, self.config.forgeInfo.fullVersion + '-universal')
         else:
-            print(ColorString.warn('Your choosed server is not exist!!!\nCurrently, there are three type server: pure/spigot/forge'))
+            RichText.warn('Your choosed server is not exist!!!\nCurrently, there are three type server: pure/spigot/forge')
             return None
         return jarFilePath
 
@@ -179,7 +179,7 @@ class Server:
         if offline_properties != None:
             with io.open(self.config.game_version_server_properties_file_path(), 'w', encoding = 'utf-8') as f:
                 f.write(offline_properties)
-                print(ColorString.confirm('Setting the server to offline mode, next launch this setting take effect!!!'))
+                RichText.success('Setting the server to offline mode, next launch this setting take effect!!!')
 
         # 为服务器核心数据文件创建符号链接
         self.symlink_server_core_files_if_need()
@@ -204,10 +204,10 @@ class Server:
         macCmd = 'export MAVEN_OPTS="-Xmx2G"; java -Xmx2G -jar ' + buildToolJarPath + versionCmd
         windowCmd = 'java -jar ' + buildToolJarPath + versionCmd
         cmd = macCmd if platformType() == 'osx' else linuxCmd if platformType() == 'linux' else windowCmd
-        print(ColorString.warn('Start build the server jar file with build tool...'))
+        RichText.warn('Start build the server jar file with build tool...')
         os.chdir(self.config.game_version_server_build_dir())
         os.system(cmd)
-        print(ColorString.confirm('Completed! And the spigot built server file generated!'))
+        RichText.success('Completed! And the spigot built server file generated!')
         shutil.move(self.config.game_version_server_jar_file_path(isInBuildDir=True), self.config.game_version_server_jar_file_path())
         os.chdir(self.config.game_version_server_dir())
         shutil.rmtree(self.config.game_version_server_build_dir())
@@ -225,10 +225,10 @@ class Server:
 
         installerJarFilePath = os.path.basename(self.config.forgeInfo.forge_installer_url)
         installServerCmd = 'java -jar ' + installerJarFilePath + ' --installServer'
-        print(ColorString.warn('Start install the forge server jar file ...'))
+        RichText.warn('Start install the forge server jar file ...')
         os.chdir(self.config.game_version_server_dir())
         os.system(installServerCmd)
-        print(ColorString.confirm('Completed! And the forge server file generated!'))
+        RichText.success('Completed! And the forge server file generated!')
 
 
     def generateForgeServerEULA(self):
@@ -249,16 +249,16 @@ class Server:
             def backupWorld_cleanUp():
                 if os.path.isfile(world_backup_file) and os.path.exists(world_backup_file):
                     os.remove(world_backup_file)
-                    print(ColorString.warn("Removed Invalid World Backup File: %s" % world_backup_file))
+                    RichText.warn("Removed Invalid World Backup File: %s" % world_backup_file)
 
-            print(ColorString.hint('Start Executing ZIP ...'))
+            RichText.info('Start Executing ZIP ...')
             CleanUp.registerTask('backupWorld_cleanUp', backupWorld_cleanUp)
             zip(world_paths, world_backup_file)
             CleanUp.cancelTask('backupWorld_cleanUp')
             file_size = os.path.getsize(world_backup_file) / 1024.0 / 1024.0 / 1024.0
-            print(ColorString.confirm("Completed! backuped world file(%.2fG): %s!!!" % (file_size, world_backup_file)))
+            RichText.success("Completed! backuped world file(%.2fG): %s!!!" % (file_size, world_backup_file))
         else: 
-            print(ColorString.error('There is no world directory!!!'))
+            RichText.error('There is no world directory!!!')
 
     def symlink_server_core_files_if_need(self):
         '''为服务器核心文件创建符号链接到共享目录，方便版本升级'''

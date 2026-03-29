@@ -59,7 +59,8 @@ def platformType():
     return system[platform.system()]
 
 def hint(msg):
-    return input(msg)
+    from .RichText import RichText
+    return RichText.input(msg)
 
 def zip(srcPaths, dstPath):
     if len(srcPaths) <= 0:

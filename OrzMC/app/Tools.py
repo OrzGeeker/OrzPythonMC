@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 from ..core.Oracle import Oracle
-from ..utils.ColorString import ColorString
+from ..utils.RichText import RichText
 from ..utils.utils import *
 from .Config import Config
 import argparse
@@ -38,7 +38,7 @@ def rsync_server_core_data():
 
     def check_args(source, destination):
         if not destination or not source:
-            print(ColorString.warn('You should provide both source and destination argument for this command, destination can be a (local dir/file) remote host (example: ubuntu@mc.jokerhub.cn)'))
+            RichText.warn('You should provide both source and destination argument for this command, destination can be a (local dir/file) remote host (example: ubuntu@mc.jokerhub.cn)')
             exit(-1)
 
     def execute_sync(source, destination, test = True):
@@ -67,8 +67,8 @@ def rsync_server_core_data():
         os.system(rsync_cmd)
 
         if test:
-            print('\ncommand: %s' % ColorString.confirm(rsync_cmd))
-            print(ColorString.hint("Run in Fake Mode!"))
+            RichText.success('\ncommand: %s' % rsync_cmd)
+            RichText.info("Run in Fake Mode!")
 
     check_args(source = source, destination = destination)
     execute_sync(source = source, destination = destination, test = True)
@@ -76,12 +76,11 @@ def rsync_server_core_data():
     confirm = ['Y','y','Yes','yes']
     cancel = ['N','n','No','no']
     while True:
-        a = hint(ColorString.confirm('\nAre you confirm want to execute this operation? [%s] ' % ('/'.join(confirm) + '|' + '/'.join(cancel))))
+        a = RichText.prompt('\nAre you confirm want to execute this operation?', choices = confirm + cancel)
         if a in confirm:
             execute_sync(source=source, destination = destination, test = False)
             break
         elif a in cancel:
             break
         else:
-            print(ColorString.warn('Your input is invalid, Please try again!'))
-
+            RichText.warn('Your input is invalid, Please try again!')

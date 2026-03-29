@@ -10,11 +10,11 @@ from ..utils.CleanUp import CleanUp
 def print_info(args):
     '''打印工具版本号'''
     if args.version_number:
-        print(ORZMC_VERSION_NUMBER_STR)
+        RichText.info(ORZMC_VERSION_NUMBER_STR)
         exit(0)
     
     if args.bmclapi:
-        print(BMCLAPI_DESC)
+        RichText.info(BMCLAPI_DESC)
 
 # argparse 使用文档：https://docs.python.org/3/library/argparse.html
 def parse_args():
