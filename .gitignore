@@ -163,3 +163,15 @@ cython_debug/
 
 .DS_Store
 .vscode/
+
+# uv
+.venv/
+
+# pytest
+.pytest_cache/
+
+# PyInstaller build dir (scripts/build.py)
+.pybuild/
+
+# runtime artifacts (managed under game root, not repo)
+java/

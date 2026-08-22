@@ -1,3 +1,41 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta:__legacy__"
+# Virtual workspace root: no [project] here — the packages live in orzmc/
+# and orzmc_app/, and `uv build` at this root builds both members.
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pyinstaller>=6.10",
+]
+
+[tool.uv.workspace]
+members = ["orzmc", "orzmc_app"]
+
+[tool.uv.sources]
+orzmc = { workspace = true }
+orzmc-app = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["dist", "build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF"]
+ignore = ["SIM105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["orzmc", "orzmc_app"]
+
+[tool.pytest.ini_options]
+testpaths = ["orzmc/tests", "orzmc_app/tests"]
+addopts = "-q"
+pythonpath = ["orzmc", "orzmc_app"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["orzmc", "orzmc_app"]
+check_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true

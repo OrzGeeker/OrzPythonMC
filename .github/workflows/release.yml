@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  quality:
+    uses: ./.github/workflows/ci.yml
+
+  binary:
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64
+            artifact: orzmc-macos-x86_64
+          - os: macos-14
+            arch: arm64
+            artifact: orzmc-macos-arm64
+          - os: ubuntu-latest
+            arch: x86_64
+            artifact: orzmc-linux-x86_64
+          - os: windows-latest
+            arch: x86_64
+            artifact: orzmc-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Build binary
+        run: uv run --package orzmc-app python scripts/build.py
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/orzmc*
+          if-no-files-found: error
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/orzmc*
+          fail_on_unmatched_files: true
+
+  pypi:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Build distributions
+        run: uv build --all-packages
+      - name: Publish to PyPI
+        run: uv publish

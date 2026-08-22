@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: MyPy
+        run: uv run mypy
+      - name: Tests
+        run: uv run --all-packages pytest
+      - name: Build both packages
+        run: uv build --all-packages
