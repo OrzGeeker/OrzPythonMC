@@ -28,6 +28,10 @@ Verdicts:
 - ``SKIP``          — the type does not support this MC version yet (e.g.
                       Forge usually lags one stable release). Type adapts to
                       different version windows than the baseline.
+- ``UP(gap)``       — upstream ships nothing for this platform/arch (Adoptium
+                      has no JRE for this OS/arch/major; Mojang ships no client
+                      natives for this arch). Warning, not a failure — the gap
+                      self-heals when the provider fills it.
 - ``FAIL(exit N)``  — the orzmc process died without reaching a good state.
 - ``TIMEOUT``       — no verdict within ``--timeout`` seconds.
 
@@ -66,6 +70,23 @@ BASE_PORT = 25570
 # "不支持", forge uses "未找到 … 的 Forge 版本"). Matching either ⇒ SKIP, i.e.
 # the type simply has no build for this MC version yet.
 SKIP_MARKS = ("不支持 Minecraft", "未找到 Minecraft")
+
+# Upstream platform gaps: orzmc ran the whole pipeline but the *provider* ships
+# nothing for this OS/arch/major, so no case on this platform can succeed no
+# matter what orzmc does. Matching ⇒ UP(gap) — a warning, not a failure (same
+# philosophy as UP(no Done)). The gap is upstream, so it self-heals: once the
+# provider fills it (Adoptium ships the JRE, Mojang ships the natives), the case
+# returns to real verdicts automatically.
+#   - Adoptium 404 for the Temurin binary URL ⇒ no JRE/JDK build for this
+#     OS/arch/major (e.g. MC 26.2 needs Java 25; Adoptium ships none for
+#     windows/aarch64). requests prints "404 Client Error: Not Found for url: …".
+#   - LWJGL "Failed to locate library" ⇒ Mojang ships no native lib for this
+#     platform/arch (e.g. 26.2 has no linux-arm64 natives — the bundled
+#     natives-linux.jar is x86-64 only).
+GAP_MARKS = (
+    "404 Client Error: Not Found for url: https://api.adoptium.net/v3/binary/latest",
+    "Failed to locate library",
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVERS = {"vanilla", "paper", "fabric", "forge"}
@@ -228,8 +249,14 @@ def run_server_case(case: Case, opts: Options, port: int) -> str:
             break
         if proc.poll() is not None:
             # Died before reaching Done: distinguish "type lacks this version"
-            # (SKIP) from a real regression.
-            result = "SKIP" if log_contains(log, SKIP_MARKS) else "FAIL(exit)"
+            # (SKIP) and "upstream ships nothing for this platform" (UP(gap))
+            # from a real regression.
+            if log_contains(log, SKIP_MARKS):
+                result = "SKIP"
+            elif log_contains(log, GAP_MARKS):
+                result = "UP(gap)"
+            else:
+                result = "FAIL(exit)"
             break
         if port_open(port):
             if port_open_since is None:
@@ -258,7 +285,15 @@ def run_client_case(case: Case, opts: Options) -> str:
     with log.open("wb") as out:
         code = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT, cwd=str(ROOT)).returncode
 
-    result = "PASS" if code == 0 else "SKIP" if log_contains(log, SKIP_MARKS) else f"FAIL(exit {code})"
+    result = (
+        "PASS"
+        if code == 0
+        else "SKIP"
+        if log_contains(log, SKIP_MARKS)
+        else "UP(gap)"
+        if log_contains(log, GAP_MARKS)
+        else f"FAIL(exit {code})"
+    )
     if opts.deep_client and result == "PASS":
         # Optional strongest check (off by default): game java still alive 15s
         # after bootstrap. CI's macOS/Windows have no GPU/GL context, so this
@@ -397,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     print("\n==== 验收汇总 ====")
     failures = 0
     for case, result in results:
-        mark = "OK" if result in ("PASS", "SKIP", "UP(no Done)") else "!!"
+        mark = "OK" if result in ("PASS", "SKIP", "UP(no Done)", "UP(gap)") else "!!"
         print(f"  [{mark}] {case.label}: {result}")
         if result.startswith("FAIL") or result == "TIMEOUT":
             failures += 1

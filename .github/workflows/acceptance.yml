@@ -30,7 +30,9 @@ concurrency:
 
 jobs:
   # 主基准:最新版本 × 全部类型 × 6 平台。类型暂未适配最新版时 harness 记 SKIP
-  # (如 Forge 通常滞后一个稳定版),最新版仍是 vanilla/paper/fabric 的主战场。
+  # (如 Forge 通常滞后一个稳定版),最新版仍是 vanilla/paper/fabric 的主战场;
+  # 上游无该平台产物(Adoptium 无某 arch 的 Java / Mojang 无某 arch 的 natives)
+  # 时记 UP(gap) —— 均不判失败,仅 FAIL/TIMEOUT 使工作流变红。
   primary:
     runs-on: ${{ matrix.os }}
     strategy:
