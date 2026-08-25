@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -80,12 +81,14 @@ SKIP_MARKS = ("不支持 Minecraft", "未找到 Minecraft")
 #   - Adoptium 404 for the Temurin binary URL ⇒ no JRE/JDK build for this
 #     OS/arch/major (e.g. MC 26.2 needs Java 25; Adoptium ships none for
 #     windows/aarch64). requests prints "404 Client Error: Not Found for url: …".
-#   - LWJGL "Failed to locate library" ⇒ Mojang ships no native lib for this
-#     platform/arch (e.g. 26.2 has no linux-arm64 natives — the bundled
-#     natives-linux.jar is x86-64 only).
+#   - LWJGL native-load failure ("Failed to locate library" / "[LWJGL] Failed
+#     to load a library") ⇒ Mojang ships no native lib for this platform/arch
+#     (e.g. 26.2 has no linux-arm64 natives — the bundled natives-linux.jar is
+#     x86-64 only, so LWJGL reports the arch mismatch).
 GAP_MARKS = (
     "404 Client Error: Not Found for url: https://api.adoptium.net/v3/binary/latest",
     "Failed to locate library",
+    "[LWJGL] Failed to load a library",
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -129,10 +132,18 @@ def resolve_latest() -> str:
 
 
 def log_contains(path: Path, needles: tuple[str, ...]) -> bool:
+    """True if any needle appears in the log, ignoring how lines are wrapped.
+
+    orzmc prints through rich's Console, which soft-wraps long lines at its
+    fallback width when there's no tty — e.g. the Adoptium 404 URL gets split
+    across lines with blank gaps. Collapse all whitespace runs first so a
+    marker spanning a wrapped line still matches.
+    """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
+    text = re.sub(r"\s+", " ", text)
     return any(n in text for n in needles)
 
 
