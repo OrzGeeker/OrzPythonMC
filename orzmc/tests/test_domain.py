@@ -106,14 +106,19 @@ class TestPathLayout:
 
     def test_layout_shape(self) -> None:
         layout = PathLayout(root="/base", version="1.20.4", game_type="vanilla")
-        assert layout.versions_dir() == "/base/versions"
-        assert layout.version_dir() == "/base/versions/1.20.4"
-        assert layout.client_dir() == "/base/versions/1.20.4/client"
-        assert layout.server_dir() == "/base/versions/1.20.4/server/vanilla"
-        assert layout.java_major_dir(8) == "/base/java/8"
-        assert layout.java_bin(17) == os.path.join("/base/java/17/bin", "java")
-        assert layout.server_jar_path() == "/base/versions/1.20.4/server/vanilla/server.jar"
-        assert layout.client_object_path("abcd") == "/base/versions/1.20.4/client/assets/objects/ab/abcd"
+        # PathLayout joins with os.path.join — expected values must use the
+        # platform separator (backslash on Windows, forward slash elsewhere).
+        versions = os.path.join("/base", "versions")
+        assert layout.versions_dir() == versions
+        assert layout.version_dir() == os.path.join(versions, "1.20.4")
+        assert layout.client_dir() == os.path.join(versions, "1.20.4", "client")
+        assert layout.server_dir() == os.path.join(versions, "1.20.4", "server", "vanilla")
+        assert layout.java_major_dir(8) == os.path.join("/base", "java", "8")
+        assert layout.java_bin(17) == os.path.join("/base", "java", "17", "bin", "java")
+        assert layout.server_jar_path() == os.path.join(versions, "1.20.4", "server", "vanilla", "server.jar")
+        assert layout.client_object_path("abcd") == os.path.join(
+            versions, "1.20.4", "client", "assets", "objects", "ab", "abcd"
+        )
 
 
 # ── domain/java ─────────────────────────────────────────────────────────────
@@ -291,7 +296,7 @@ class TestLaunchArgs:
         args = game_args(LAUNCH_JSON, options, paths)
         assert "--demo" in args
         assert args[args.index("--username") + 1] == "tester"
-        assert args[args.index("--gameDir") + 1] == "/base/versions/1.20.4/client"
+        assert args[args.index("--gameDir") + 1] == os.path.join("/base", "versions", "1.20.4", "client")
 
     def test_build_launch_command(self) -> None:
         options = RuntimeOptions(version="1.20.4", username="tester", jvm_opts="-XX:+UseZGC")
@@ -350,7 +355,7 @@ class TestLaunchArgs:
         assert "${" not in " ".join(args)
         assert args[args.index("--username") + 1] == "tester"
         assert args[args.index("--version") + 1] == "1.20.4"
-        assert args[args.index("--gameDir") + 1] == "/base/versions/1.20.4/client"
+        assert args[args.index("--gameDir") + 1] == os.path.join("/base", "versions", "1.20.4", "client")
         assert args[args.index("--assetIndex") + 1] == "1.20"
         assert "--width" not in args  # has_custom_resolution defaults false
         assert "--demo" not in args  # is_demo_user defaults false

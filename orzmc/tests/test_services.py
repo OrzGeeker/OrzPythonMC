@@ -8,7 +8,9 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import sys
 import tarfile
+import zipfile
 
 from fakes import FakeHttp, FakeProcess, FakeReporter, FakeSink
 
@@ -52,7 +54,7 @@ class TestJavaEnv:
 
     def test_resolve_installs_and_caches(self, tmp_path, reporter, sink, http) -> None:
         # seed a fake JDK archive (Adoptium layout: single top-level dir)
-        archive = _make_tar_gz(
+        archive = _make_archive(
             {"jdk-17.0.1/bin/java": "#!/bin/sh\necho 17\n", "jdk-17.0.1/release": "JAVA_VERSION=17\n"}
         )
         http.canned_archive = archive
@@ -68,7 +70,7 @@ class TestJavaEnv:
         assert http.requests == []
 
     def test_install_uses_jre_by_default(self, tmp_path, reporter, sink, http) -> None:
-        http.canned_archive = _make_tar_gz({"jre-8/bin/java": "java\n"})
+        http.canned_archive = _make_archive({"jre-8/bin/java": "java\n"})
         fs = FileStore()
         paths = PathLayout(root=str(tmp_path))
         env = JavaEnv(http, fs, reporter, sink, paths)
@@ -78,7 +80,7 @@ class TestJavaEnv:
     def test_resolve_java_uses_jre_for_every_type(self, tmp_path, reporter, sink, http) -> None:
         # Every supported type runs on a sandboxed JRE — no game type needs a
         # full JDK at run time (fabric/forge install steps use JREs too).
-        http.canned_archive = _make_tar_gz({"jre-21/bin/java": "java\n"})
+        http.canned_archive = _make_archive({"jre-21/bin/java": "java\n"})
         for game_type in ("vanilla", "paper", "fabric", "forge"):
             services = _services(tmp_path, reporter, sink, http, game_type=game_type)
             assert services.resolve_java(21) == services.context.paths.java_bin(21)
@@ -518,6 +520,18 @@ def _make_tar_gz(files: dict[str, str]) -> bytes:
             info.mode = 0o755
             tf.addfile(info, io.BytesIO(data))
     return buf.getvalue()
+
+
+def _make_archive(files: dict[str, str]) -> bytes:
+    """Canned Adoptium archive in the current platform's format: Windows ships
+    .zip, macOS/Linux .tar.gz, and JavaEnv._extract keys off the extension."""
+    if sys.platform == "win32":
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            for path, content in files.items():
+                zf.writestr(path, content)
+        return buf.getvalue()
+    return _make_tar_gz(files)
 
 
 def pytest_raises(exc, **kwargs):
