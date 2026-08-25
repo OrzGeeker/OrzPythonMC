@@ -26,6 +26,7 @@ from orzmc.core.forge import PROMOTIONS_URL
 from orzmc.core.server import CoreProvider
 from orzmc.core.server.base import ServerPrepare
 from orzmc.core.server.paper import PaperAPI
+from orzmc.domain.libraries import os_arch, os_key
 from orzmc.services.java import JavaEnv
 
 
@@ -473,13 +474,17 @@ class TestClientService:
         # coordinates, e.g. org.lwjgl:lwjgl:3.4.1:natives-macos-arm64) must stay on
         # the classpath — the game self-extracts them from there. Excluding them is
         # what crashed the client with "Failed to locate library: liblwjgl.dylib".
+        # The rule mirrors the current platform so the assertion holds on every OS
+        # (on Linux a mac-only native is correctly filtered out by the rules).
         services = _services(tmp_path, reporter, sink, http)
         paths = services.context.paths
         fs = services.fs
-        rel_path = "org/lwjgl/lwjgl/3.4.1/lwjgl-3.4.1-natives-macos-arm64.jar"
+        os_name = os_key()
+        classifier = f"natives-{os_name}-{os_arch()}"
+        rel_path = f"org/lwjgl/lwjgl/3.4.1/lwjgl-3.4.1-{classifier}.jar"
         native: dict = {
-            "name": "org.lwjgl:lwjgl:3.4.1:natives-macos-arm64",
-            "rules": [{"action": "allow", "os": {"name": "osx"}}],
+            "name": f"org.lwjgl:lwjgl:3.4.1:{classifier}",
+            "rules": [{"action": "allow", "os": {"name": os_name}}],
             "downloads": {"artifact": {"path": rel_path, "url": "https://libraries.minecraft.net/" + rel_path}},
         }
         fs.write_text(paths.client_jar_path(), "jar")

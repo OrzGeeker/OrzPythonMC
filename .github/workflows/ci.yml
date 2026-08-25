@@ -47,7 +47,9 @@ jobs:
   # — worth the full 6-platform sweep to catch OS bugs cheaply.
   test:
     needs: quality
-    if: ${{ !inputs.skip-test-matrix }}
+    # inputs 上下文仅在 workflow_call 触发时存在;push/PR 时用 || 'false' 兜底,
+    # 避免直接引用 inputs.* 在非 workflow_call 触发下解析为空。
+    if: ${{ !fromJSON(inputs.skip-test-matrix || 'false') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
