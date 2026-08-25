@@ -41,7 +41,7 @@ orzmc/services → orzmc/core → orzmc/domain + orzmc/infra
 ```
 python/                         # uv workspace 根
   pyproject.toml  uv.lock  AGENTS.md  README.md
-  .github/workflows/{ci,release}.yml  scripts/build.py
+  .github/workflows/{ci,acceptance,release}.yml  scripts/{build,acceptance}.py
   orzmc/                        # 库包(name="orzmc",py.typed)
     pyproject.toml
     orzmc/  version.py  __init__.py
@@ -106,6 +106,17 @@ uv lock                            # 锁定依赖
 4. **跑全部门禁**:`ruff` → `mypy` → `pytest` → `uv build` 全过。
 5. **更新本文件**:涉及架构 / 命令 / 目录结构 / 规范的变更,同步更新 AGENTS.md(并考虑 README)。
 6. 关键决策记录在本文件,避免各智能体行为漂移。
+
+## CI / 真实验收
+
+**6 平台矩阵**(多处复用同一组 runner 标签):`ubuntu-latest`、`ubuntu-24.04-arm`、`macos-15-intel`、`macos-15`、`windows-latest`、`windows-11-arm`。注意 **`macos-13` 已废弃**,x86_64 macOS 用 `macos-15-intel`;`macos-latest` 已迁到 macOS 26,arm64 显式钉 `macos-15`。arm64 runner 为 public preview。
+
+- **`ci.yml`(push/PR)**:`quality` 单 runner 跑格式/lint/mypy/测试/构建(平台无关);`test` 6 平台全跑 pytest(纯 Python 假件但覆盖 OS 敏感路径,秒级);`binary` 仅 `push` 分支跑(发版 tag push 与 PR 不跑),6 平台 PyInstaller 构建 + 上传 artifact。声明 `workflow_call` + `skip-test-matrix` input,供 release 复用。
+- **`acceptance.yml`(每日 04:23 UTC + workflow_dispatch)**:真实验收 harness `scripts/acceptance.py`(跨平台,stdlib + psutil 进程树管理,替代 `pgrep`/`pkill`;`-m orzmc_app.cli` 调 CLI,不嵌套 `uv run`)。
+  - **版本策略(以最新版为主基准)**:`primary` job 夜间+手动,6 平台跑最新版 × 全部类型(server vanilla/paper/fabric/forge + client vanilla/fabric/forge);`backcompat` job 仅手动 `suite=full`,x86_64 三平台跑旧版本 vanilla 冒烟(`--backcompat`,默认 `1.20.4`)。`latest` 由 Mojang `version_manifest_v2.json` 的 `latest.release` 解析,不额外拉取其它源。
+  - **判定语义**:`PASS`(server 日志 `Done (` / client 退出码 0 引导级);`UP(no Done)`(端口开 90s 无 Done = Mojang MC-263542 世界生成卡死,记警告不判失败);`SKIP`(日志含"不支持 Minecraft"/"未找到 Minecraft",类型暂未适配该版本,如 Forge 滞后);`FAIL`/`TIMEOUT` 判失败。客户端引导级判定依赖 Linux `xvfb-run`,headless 需装 xvfb;`--deep-client` 仅真机手动用(CI 的 macOS/Windows 无 GL 上下文会假阴性)。
+  - 游戏 root 按 `runner.os`-`runner.arch` 缓存(Java + assets + jars),夜间只取增量。
+- **`release.yml`(打 `v*` 标签)**:`quality` 复用 `ci.yml` 传 `skip-test-matrix: true`(6 平台 pytest 已在 main 跑过);`binary` 6 组合构建挂 GitHub Release;`pypi` 双包发布。
 
 ## 发布
 

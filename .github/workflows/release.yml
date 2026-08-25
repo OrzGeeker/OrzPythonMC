@@ -10,6 +10,9 @@ permissions:
 jobs:
   quality:
     uses: ./.github/workflows/ci.yml
+    with:
+      # 6 平台 pytest 在 main push 已跑过;发版只取单 runner 质量门禁。
+      skip-test-matrix: true
 
   binary:
     needs: quality
@@ -17,18 +20,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
+          - os: macos-15-intel
             arch: x86_64
             artifact: orzmc-macos-x86_64
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             artifact: orzmc-macos-arm64
           - os: ubuntu-latest
             arch: x86_64
             artifact: orzmc-linux-x86_64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            artifact: orzmc-linux-arm64
           - os: windows-latest
             arch: x86_64
             artifact: orzmc-windows-x86_64
+          - os: windows-11-arm
+            arch: arm64
+            artifact: orzmc-windows-arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:

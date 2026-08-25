@@ -4,12 +4,21 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+    inputs:
+      # Release reuses this workflow as its quality gate; the 6-platform test
+      # matrix already ran on main, so the tag only needs the single-runner checks.
+      skip-test-matrix:
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Platform-independent checks: run once, fail fast before fanning out.
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -32,3 +41,81 @@ jobs:
         run: uv run --all-packages pytest
       - name: Build both packages
         run: uv build --all-packages
+
+  # Pure-Python tests with fakes, but they exercise OS-sensitive paths
+  # (path sep, platform.machine, subprocess creation flags, zip/tar extract)
+  # — worth the full 6-platform sweep to catch OS bugs cheaply.
+  test:
+    needs: quality
+    if: ${{ !inputs.skip-test-matrix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+          - os: macos-15
+            arch: arm64
+          - os: windows-latest
+            arch: x86_64
+          - os: windows-11-arm
+            arch: arm64
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Tests
+        run: uv run --all-packages pytest
+
+  # PyInstaller packaging is OS/arch-specific — verify a build works on all 6
+  # platforms after every merge to main (not per-PR: keeps PR CI fast). The
+  # branch check keeps this from running on release tag pushes.
+  binary:
+    needs: quality
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+          - os: macos-15
+            arch: arm64
+          - os: windows-latest
+            arch: x86_64
+          - os: windows-11-arm
+            arch: arm64
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Build binary
+        run: uv run --package orzmc-app python scripts/build.py
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: orzmc-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/orzmc*
+          if-no-files-found: error

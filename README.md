@@ -85,6 +85,24 @@ uv build --all-packages       # 构建两个包
 uv run --package orzmc-app python scripts/build.py   # 构建单文件二进制 → dist/orzmc
 ```
 
+## 自动化验收与 CI
+
+跨平台保证由三个 GitHub Actions 工作流承担(**6 平台** = macOS/Linux/Windows × x86_64/arm64):
+
+- **`ci.yml`(每次 push/PR)**:`quality` 单 runner 跑格式 / lint / mypy / 测试 / 构建(平台无关,只跑一次);`test` 在 **6 平台全跑 pytest**(纯 Python 假件,秒级,专抓 OS 差异);`binary` 在**合并到 main 后** 6 平台构建 PyInstaller 二进制(PR 不跑,保持快速)。
+- **`acceptance.yml`(每日 04:23 UTC + 手动触发)**:**真实验收** —— 真实下载 Minecraft / Java 并启动。版本策略**以最新版本为主基准**:`primary` 在 6 平台跑最新版 × 全部类型(vanilla/paper/fabric/forge 服务端 + vanilla/fabric/forge 客户端);`backcompat` 手动 `full` 套件时在 x86_64 三平台跑**旧版本后向兼容冒烟**(默认 `1.20.4`,`backcompat_versions` 输入可加 1.21.x 等)。
+- **`release.yml`(打 `v*` 标签)**:6 平台各构建一个独立二进制挂到 GitHub Release;复用 `ci.yml` 作质量门禁。
+
+验收 harness 即仓库内 `scripts/acceptance.py`(跨平台,不依赖 pgrep/pkill),本地可直接跑:
+
+```bash
+uv run --package orzmc-app python scripts/acceptance.py \
+    --case server:vanilla:latest --case client:vanilla:latest \
+    --backcompat "1.20.4" --root /tmp/orzmc-accept
+```
+
+版本来源遵循约束:最新版本号由 Mojang `version_manifest_v2.json` 的 `latest.release` 解析,不额外拉取其它源;各类型按各自官方源获取。
+
 ## 兼容性说明(v1 → v2)
 
 - 旧顶层 `orzmc -s -v 1.20.4` 改为 `orzmc server -v 1.20.4`;客户端/服务端统一 `-v/-t/-m/-x`。

@@ -1,0 +1,121 @@
+name: Acceptance
+
+on:
+  schedule:
+    # Daily 04:23 UTC — primary suite only (latest × all types × 6 platforms).
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        type: choice
+        description: primary = 最新版全类型;full = primary + 旧版本后向兼容冒烟
+        default: primary
+        options: [primary, full]
+      backcompat_versions:
+        type: string
+        description: full 时旧版本列表(逗号分隔),每版跑 server/client vanilla 冒烟
+        default: "1.20.4"
+      deep-client:
+        type: boolean
+        description: 客户端追加 15s java 存活检查(CI 的 macOS/Windows 无 GL,可能假阴性,真机手动用)
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 真实验收要真实下载(Java + client assets + jars),游戏 root 按 OS/arch 缓存,
+# 夜间只取增量;headless Linux 的客户端需要 xvfb 虚拟显示。
+# 平台:macOS/Linux/Windows × x86_64/arm64(与 ci.yml 一致)。
+
+jobs:
+  # 主基准:最新版本 × 全部类型 × 6 平台。类型暂未适配最新版时 harness 记 SKIP
+  # (如 Forge 通常滞后一个稳定版),最新版仍是 vanilla/paper/fabric 的主战场。
+  primary:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+          - os: macos-15
+            arch: arm64
+          - os: windows-latest
+            arch: x86_64
+          - os: windows-11-arm
+            arch: arm64
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Install xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Cache game root (Java + assets + jars)
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/orzmc-accept
+          key: accept-primary-${{ runner.os }}-${{ runner.arch }}
+      - name: Acceptance (latest × all types)
+        run: >-
+          uv run --package orzmc-app python scripts/acceptance.py
+          --root "${{ runner.temp }}/orzmc-accept"
+          --case server:vanilla:latest
+          --case server:paper:latest
+          --case server:fabric:latest
+          --case server:forge:latest
+          --case client:vanilla:latest
+          --case client:fabric:latest
+          --case client:forge:latest
+          ${{ inputs.deep-client && '--deep-client' || '' }}
+
+  # 后向兼容冒烟:旧版本 × vanilla server/client(证明 Mojang manifest/启动管线
+  # 仍兼容该大版本)。仅手动 full 套件触发;平台取 x86_64 三平台省 arm64 配额。
+  backcompat:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.suite == 'full' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: macos-15-intel
+            arch: x86_64
+          - os: windows-latest
+            arch: x86_64
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Install xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Cache game root (Java + assets + jars)
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/orzmc-backcompat
+          key: accept-backcompat-${{ runner.os }}-${{ runner.arch }}
+      - name: Acceptance (old-version backcompat smoke)
+        run: >-
+          uv run --package orzmc-app python scripts/acceptance.py
+          --root "${{ runner.temp }}/orzmc-backcompat"
+          --backcompat "${{ inputs.backcompat_versions }}"
+          ${{ inputs.deep-client && '--deep-client' || '' }}
