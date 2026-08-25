@@ -82,13 +82,18 @@ SKIP_MARKS = ("不支持 Minecraft", "未找到 Minecraft")
 #     OS/arch/major (e.g. MC 26.2 needs Java 25; Adoptium ships none for
 #     windows/aarch64). requests prints "404 Client Error: Not Found for url: …".
 #   - LWJGL native-load failure ("Failed to locate library" / "[LWJGL] Failed
-#     to load a library") ⇒ Mojang ships no native lib for this platform/arch
+#     to load a library" / the game's NativeLibrariesBootstrap.loadLibrary
+#     crash-report frame) ⇒ Mojang ships no native lib for this platform/arch
 #     (e.g. 26.2 has no linux-arm64 natives — the bundled natives-linux.jar is
-#     x86-64 only, so LWJGL reports the arch mismatch).
+#     x86-64 only, so LWJGL reports the arch mismatch). Each loader prints its
+#     own message: vanilla "[LWJGL] Failed to load a library", forge a raw
+#     UnsatisfiedLinkError, fabric a crash report whose "[LWJGL]" line orzmc's
+#     own tail can truncate — so also match the surviving crash-report frame.
 GAP_MARKS = (
     "404 Client Error: Not Found for url: https://api.adoptium.net/v3/binary/latest",
     "Failed to locate library",
     "[LWJGL] Failed to load a library",
+    "NativeLibrariesBootstrap.loadLibrary",
 )
 
 ROOT = Path(__file__).resolve().parent.parent
