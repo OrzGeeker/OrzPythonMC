@@ -25,6 +25,11 @@ class ForgeProvider(CoreProvider):
     game_type = GameType.FORGE
 
     def obtain(self, prepare: ServerPrepare) -> None:
+        # A complete install (jar + libraries/ tree) must not re-run the heavy
+        # --installServer step on every invocation; --force opts back in.
+        if not prepare.force_download and self._is_installed(prepare):
+            prepare.reporter.info("Forge 服务端已安装,跳过安装器(用 --force 重装)")
+            return
         forge = Forge(prepare.http)
         full = forge.latest_full_version(prepare.version)
         build_dir = prepare.paths.server_build_dir()
@@ -43,6 +48,13 @@ class ForgeProvider(CoreProvider):
         if code != 0:
             raise RuntimeError(f"Forge 安装失败 ({full})")
         self._install_product(prepare, full, build_dir)
+
+    def _is_installed(self, prepare: ServerPrepare) -> bool:
+        """True when the server jar is present and, for the shim era, its
+        libraries/ tree sits beside it (a partial move is not "installed")."""
+        if not prepare.fs.is_file(prepare.paths.server_jar_path()):
+            return False
+        return prepare.fs.is_dir(os.path.join(prepare.paths.server_dir(), "libraries"))
 
     def _install_product(self, prepare: ServerPrepare, full: str, build_dir: str) -> None:
         """Move the generated server core(s) into the server directory."""

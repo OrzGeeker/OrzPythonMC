@@ -25,6 +25,7 @@ from orzmc import (
 from orzmc.core.forge import PROMOTIONS_URL
 from orzmc.core.server import CoreProvider
 from orzmc.core.server.base import ServerPrepare
+from orzmc.core.server.paper import PaperAPI
 from orzmc.services.java import JavaEnv
 
 
@@ -361,6 +362,94 @@ class TestServerProviders:
         assert provider is not None
         provider.obtain(prepare)
         assert prepare.fs.is_file(paths.server_jar_path())
+
+    def test_forge_server_skips_installer_when_installed(self, tmp_path) -> None:
+        # a complete install (shim jar + libraries/ beside it) must not re-run
+        # --installServer; only --force opts back in.
+        http = FakeHttp()
+        http.json_responses[PROMOTIONS_URL] = {"promos": {"1.20.4-latest": "49.2.8"}}
+        paths = PathLayout(root=str(tmp_path), version="1.20.4", game_type="forge")
+        process = FakeProcess()
+        prepare = _server_prepare(tmp_path, http=http, process=process, game_type="forge")
+        prepare.fs.ensure_dir(paths.server_dir())
+        prepare.fs.write_text(paths.server_jar_path(), "fake")
+        prepare.fs.ensure_dir(os.path.join(paths.server_dir(), "libraries"))
+        provider = CoreProvider.for_type(GameType.FORGE)
+        assert provider is not None
+        provider.obtain(prepare)
+        assert process.last_cmd is None  # installer never ran
+        assert http.requests == []  # no promotions / installer download
+
+    def test_paper_api_prefers_server_default_url(self) -> None:
+        # Fill API: the concrete download url comes straight from the latest
+        # build response; server:default wins over server:mojang when both exist.
+        http = FakeHttp()
+        # versions are grouped by major key, concrete newest-first
+        http.json_responses = {
+            "/v3/projects/paper": {"versions": {"26.2": ["26.2", "26.2-rc-2"], "1.20": ["1.20.6", "1.20.4", "1.20.2"]}},
+            "/v3/projects/paper/versions/1.20.4/builds/latest": {
+                "id": 499,
+                "downloads": {
+                    "server:mojang": {
+                        "name": "paper-1.20.4-499-mojang.jar",
+                        "url": "https://fill-data.papermc.io/v1/objects/mojang/paper-1.20.4-499-mojang.jar",
+                    },
+                    "server:default": {
+                        "name": "paper-1.20.4-499.jar",
+                        "url": "https://fill-data.papermc.io/v1/objects/abc/paper-1.20.4-499.jar",
+                    },
+                },
+            },
+        }
+        assert (
+            PaperAPI(http).download_url("1.20.4") == "https://fill-data.papermc.io/v1/objects/abc/paper-1.20.4-499.jar"
+        )
+
+    def test_paper_api_major_group_uses_newest_concrete(self) -> None:
+        # a group-level request ("1.20") resolves to the newest concrete within it
+        http = FakeHttp()
+        http.json_responses = {
+            "/v3/projects/paper": {"versions": {"26.2": ["26.2", "26.2-rc-2"], "1.20": ["1.20.6", "1.20.4", "1.20.2"]}},
+            "/v3/projects/paper/versions/1.20.6/builds/latest": {
+                "id": 506,
+                "downloads": {
+                    "server:default": {
+                        "name": "paper-1.20.6-506.jar",
+                        "url": "https://fill-data.papermc.io/v1/objects/d/paper-1.20.6-506.jar",
+                    }
+                },
+            },
+        }
+        assert PaperAPI(http).download_url("1.20") == "https://fill-data.papermc.io/v1/objects/d/paper-1.20.6-506.jar"
+
+    def test_paper_server_uses_fill_api_latest_build(self, tmp_path) -> None:
+        http = FakeHttp()
+        http.json_responses = {
+            "/v3/projects/paper": {"versions": {"26.2": ["26.2"], "1.20": ["1.20.6", "1.20.4", "1.20.2"]}},
+            "/v3/projects/paper/versions/1.20.4/builds/latest": {
+                "id": 499,
+                "downloads": {
+                    "server:default": {
+                        "name": "paper-1.20.4-499.jar",
+                        "url": "https://fill-data.papermc.io/v1/objects/abc/paper-1.20.4-499.jar",
+                    }
+                },
+            },
+        }
+        prepare = _server_prepare(tmp_path, http=http, process=FakeProcess(), game_type="paper")
+        provider = CoreProvider.for_type(GameType.PAPER)
+        assert provider is not None
+        provider.obtain(prepare)
+        assert prepare.fs.is_file(prepare.paths.server_jar_path())
+
+    def test_paper_server_unknown_version_raises(self, tmp_path) -> None:
+        http = FakeHttp()
+        http.json_responses = {"/v3/projects/paper": {"versions": {"26.2": ["26.2"]}}}
+        prepare = _server_prepare(tmp_path, http=http, process=FakeProcess(), game_type="paper", version="1.21")
+        provider = CoreProvider.for_type(GameType.PAPER)
+        assert provider is not None
+        with pytest_raises(RuntimeError, match="Paper 不支持 Minecraft 1.21"):
+            provider.obtain(prepare)
 
 
 class TestClientService:

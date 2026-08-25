@@ -1,4 +1,11 @@
-"""Paper server core: resolve the latest Paper build and download it."""
+"""Paper server core: resolve the latest Paper build and download it.
+
+Paper migrated to the Fill API (``fill.papermc.io/v3``); the legacy
+``api.papermc.io/v2`` project/version/build endpoints are gone (410 Gone).
+The Fill API groups versions by major key and exposes the concrete download
+``url`` directly on the latest-build response (path-suffix construction no
+longer works).
+"""
 
 from __future__ import annotations
 
@@ -6,7 +13,7 @@ from orzmc.core.server.base import CoreProvider, ServerPrepare
 from orzmc.domain.types import GameType
 from orzmc.infra.http import HttpClient
 
-API_BASE = "https://api.papermc.io/v2"
+API_BASE = "https://fill.papermc.io/v3"
 
 
 class PaperAPI:
@@ -14,40 +21,42 @@ class PaperAPI:
         self._http = http
 
     def download_url(self, mc_version: str) -> str:
-        """Resolve the latest Paper build download URL for ``mc_version``."""
+        """Resolve the latest stable Paper build download URL for ``mc_version``."""
         project = self._http.get_json(f"{API_BASE}/projects/paper")
-        versions: list[str] = project.get("versions", [])
+        versions: dict[str, list[str]] = project.get("versions", {})
         matched = _match_version(versions, mc_version)
         if matched is None:
             raise RuntimeError(f"Paper 不支持 Minecraft {mc_version}")
 
-        build_meta = self._http.get_json(f"{API_BASE}/projects/paper/versions/{matched}")
-        builds: list[int] = build_meta.get("builds", [])
-        if not builds:
-            raise RuntimeError(f"Paper {matched} 没有可用构建")
-        build_number = builds[-1]
-
-        build_info = self._http.get_json(f"{API_BASE}/projects/paper/versions/{matched}/builds/{build_number}")
-        jar_name = (build_info.get("downloads", {}).get("application", {}) or {}).get("name")
-        if not jar_name:
-            raise RuntimeError(f"Paper {matched} build {build_number} 没有可下载的 jar")
-        return f"{API_BASE}/projects/paper/versions/{matched}/builds/{build_number}/downloads/{jar_name}"
+        build = self._http.get_json(f"{API_BASE}/projects/paper/versions/{matched}/builds/latest")
+        downloads: dict[str, dict[str, str]] = build.get("downloads", {})
+        server = downloads.get("server:default") or downloads.get("server:mojang") or {}
+        url = server.get("url")
+        if not url:
+            raise RuntimeError(f"Paper {matched} 最新构建没有可下载的 jar")
+        return url
 
 
-def _match_version(available: list[str], mc_version: str) -> str | None:
-    """Return the newest available version for ``mc_version`` (exact or prefixed)."""
-    exact: list[str] = []
-    prefixed: list[str] = []
-    for v in available:
-        if v == mc_version:
-            exact.append(v)
-        elif v.startswith(f"{mc_version}-"):
-            prefixed.append(v)
-    candidates = exact or prefixed
-    if not candidates:
-        return None
-    # versions are ordered oldest→newest; pick the last
-    return candidates[-1]
+def _match_version(available: dict[str, list[str]], mc_version: str) -> str | None:
+    """Return a concrete Paper version matching ``mc_version``.
+
+    The Fill API groups versions by major key (e.g. ``"1.20"`` maps to
+    ``["1.20.6", "1.20.4", "1.20.2", ...]``, newest first).  ``mc_version`` may
+    name a group itself (its newest concrete wins) or a concrete version
+    within a group.
+    """
+    if mc_version in available:
+        return _newest(available[mc_version])
+    for key, concrete in available.items():
+        if mc_version.startswith(f"{key}.") or mc_version.startswith(f"{key}-"):
+            if mc_version in concrete:
+                return mc_version
+            return _newest(concrete)
+    return None
+
+
+def _newest(concrete: list[str]) -> str | None:
+    return concrete[0] if concrete else None
 
 
 class PaperProvider(CoreProvider):

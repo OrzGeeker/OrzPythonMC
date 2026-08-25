@@ -20,8 +20,9 @@ class Fabric:
     def profile(self) -> ProfileAddon:
         """Resolve the fabric-loader profile json for this MC version."""
         loader_version = self.loader or self.latest_loader_version()
-        installer_version = self.latest_installer_version()
-        url = f"{META_BASE}/versions/loader/{self.version}/{loader_version}/{installer_version}/profile/json"
+        # fabric-meta stopped accepting the installer version in this URL (404
+        # for every combo); the loader version alone resolves the profile.
+        url = f"{META_BASE}/versions/loader/{self.version}/{loader_version}/profile/json"
         config: dict[str, Any] = self._http.get_json(url)
 
         libraries: list[Library] = []
@@ -29,17 +30,16 @@ class Fabric:
             name = lib.get("name")
             if not name:
                 continue
-            # fabric-meta profile entries carry full download metadata
-            url = lib.get("url") or ""
-            path = name.replace(":", "/") + ".jar"
-            if url:
-                # strip the leading path so the jar lands under libraries/
-                path = url.replace("https://maven.fabricmc.net/", "").split("?")[0]
+            # fabric-meta's `url` is now just the repository base (e.g.
+            # ``https://maven.fabricmc.net/``), not a per-artifact url — the
+            # local path must come from the maven coordinates themselves.
+            path = _coordinate_path(name)
+            base = lib.get("url") or "https://maven.fabricmc.net/"
             libraries.append(
                 Library(
                     name=name,
                     path=path,
-                    url=url,
+                    url=base.rstrip("/") + "/" + path,
                     sha1=lib.get("sha1"),
                     size=lib.get("size"),
                 )
@@ -70,6 +70,22 @@ class Fabric:
             if entry.get("stable"):
                 return entry["version"]
         return entries[0]["version"]
+
+
+def _coordinate_path(name: str) -> str:
+    """Map maven coordinates ``group:artifact:version[:classifier]`` to a jar path."""
+    parts = name.split(":")
+    if len(parts) == 3:
+        group, artifact, version = parts
+        classifier = ""
+    elif len(parts) == 4:
+        group, artifact, version, classifier = parts
+    else:
+        return name.replace(":", "/") + ".jar"
+    base = f"{artifact}-{version}"
+    if classifier:
+        base += f"-{classifier}"
+    return f"{group.replace('.', '/')}/{artifact}/{version}/{base}.jar"
 
 
 def _main_class(config: dict[str, Any]) -> str | None:

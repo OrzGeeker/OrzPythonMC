@@ -80,12 +80,13 @@ class TestFabricClientProvider:
         http.json_responses = {
             "/versions/loader/1.20.4": [{"loader": {"version": "0.19.3", "stable": True}}],
             "/versions/installer": [{"version": "1.1.2", "stable": True}],
-            "/versions/loader/1.20.4/0.19.3/1.1.2/profile/json": {
+            "/versions/loader/1.20.4/0.19.3/profile/json": {
                 "mainClass": "net.fabricmc.loader.impl.launch.knot.KnotClient",
                 "libraries": [
                     {
+                        # fabric-meta now returns just the repository base here
                         "name": "net.fabricmc:fabric-loader:0.19.3",
-                        "url": "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.19.3/fabric-loader-0.19.3.jar",
+                        "url": "https://maven.fabricmc.net/",
                         "sha1": "abc",
                     }
                 ],
