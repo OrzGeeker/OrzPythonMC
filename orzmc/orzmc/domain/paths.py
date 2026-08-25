@@ -58,6 +58,10 @@ class PathLayout:
     def version_manifest_path(self) -> str:
         return os.path.join(self.cache_dir(), "version_manifest.json")
 
+    def version_jsons_dir(self) -> str:
+        """Shared cache for per-version Mojang JSONs — used by both client & server."""
+        return os.path.join(self.cache_dir(), "versions")
+
     def download_tmp_dir(self) -> str:
         return os.path.join(self.cache_dir(), "download_tmp")
 
@@ -100,8 +104,13 @@ class PathLayout:
     def client_jar_path(self) -> str:
         return os.path.join(self.client_dir(), f"{self.version}.jar")
 
-    def client_json_path(self) -> str:
-        return os.path.join(self.client_dir(), f"{self.version}.json")
+    def client_launch_log_path(self) -> str:
+        """Captured JVM stdout/stderr for a detached client launch.
+
+        Kept separate from Minecraft's own ``logs/latest.log`` so a crashed JVM
+        that never reaches the game never clobbers the game's log file.
+        """
+        return os.path.join(self.client_dir(), "launch.log")
 
     def client_profiles_dir(self) -> str:
         return os.path.join(self.client_dir(), "profiles")
@@ -129,9 +138,6 @@ class PathLayout:
 
     def server_properties_path(self) -> str:
         return os.path.join(self.server_dir(), "server.properties")
-
-    def server_commands_path(self) -> str:
-        return os.path.join(self.server_dir(), "commands.yml")
 
     def server_plugins_dir(self) -> str:
         return os.path.join(self.server_dir(), "plugins")

@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 
 
 class ProgressSink(ABC):
-    """Abstract progress display. The app layer injects its own (e.g. Textual)."""
+    """Abstract progress display. The app layer injects its own."""
 
     @abstractmethod
     def start(self, desc: str, total: int | None = None) -> None: ...

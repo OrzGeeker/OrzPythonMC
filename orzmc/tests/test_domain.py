@@ -1,4 +1,4 @@
-"""Pure domain logic: types, options, paths, java, libraries, launch args, plan."""
+"""Pure domain logic: types, options, paths, java, libraries, launch args."""
 
 from __future__ import annotations
 
@@ -10,13 +10,10 @@ from orzmc import (
     DEFAULT_JAVA_MAJOR,
     GameType,
     PathLayout,
-    Plan,
     RuntimeOptions,
-    Step,
     build_launch_command,
     game_args,
     jvm_args,
-    parse_java_major,
     required_java_major,
     resolve_libraries,
 )
@@ -32,21 +29,17 @@ class TestGameType:
             GameType.parse("bogus")
 
     def test_capabilities(self) -> None:
+        # Client types: vanilla / fabric / forge (each pairs with its server).
         assert GameType.VANILLA.is_client_capable
+        assert GameType.FABRIC.is_client_capable
         assert GameType.FORGE.is_client_capable
-        assert not GameType.PAPER.is_client_capable
-        assert not GameType.SPIGOT.is_client_capable
+        assert not GameType.PAPER.is_client_capable  # paper is server-only
         assert all(t.is_server_capable for t in GameType)
-
-    def test_needs_jdk_only_for_spigot(self) -> None:
-        assert GameType.SPIGOT.needs_jdk
-        assert not GameType.VANILLA.needs_jdk
-        assert not GameType.FORGE.needs_jdk
 
     def test_server_jar_name(self) -> None:
         assert GameType.VANILLA.server_jar_name("1.20.4") == "server.jar"
         assert GameType.PAPER.server_jar_name("1.20.4") == "paper-1.20.4.jar"
-        assert GameType.SPIGOT.server_jar_name("1.20.4") == "spigot-1.20.4.jar"
+        assert GameType.FABRIC.server_jar_name("1.20.4") == "fabric-server-launch.jar"
         assert GameType.FORGE.server_jar_name("1.20.4") == "forge-1.20.4.jar"
 
 
@@ -98,16 +91,14 @@ class TestPathLayout:
             layout.client_library_path("net/minecraft/1.20.4/mc.jar"),
             layout.client_natives_dir(),
             layout.client_jar_path(),
-            layout.client_json_path(),
             layout.client_profiles_dir(),
-            layout.client_profile_path("optifine:1.20.4"),
+            layout.client_profile_path("1.20.4"),
             layout.client_launcher_profiles_path(),
             layout.server_dir(),
             layout.server_build_dir(),
             layout.server_jar_path(),
             layout.server_eula_path(),
             layout.server_properties_path(),
-            layout.server_commands_path(),
             layout.server_plugins_dir(),
             layout.server_world_dir(),
         ]
@@ -129,17 +120,6 @@ class TestPathLayout:
 
 
 class TestJava:
-    def test_parse_java_major_modern(self) -> None:
-        assert parse_java_major('openjdk version "17.0.8" 2023-07-18') == 17
-        assert parse_java_major('openjdk version "21.0.1" 2023-10-17') == 21
-
-    def test_parse_java_major_legacy(self) -> None:
-        assert parse_java_major('java version "1.8.0_202"') == 8
-        assert parse_java_major('openjdk version "1.8.0_392"') == 8
-
-    def test_parse_java_major_garbage(self) -> None:
-        assert parse_java_major("not a java output") is None
-
     def test_required_java_major_reads_metadata(self) -> None:
         assert required_java_major({"javaVersion": {"majorVersion": 17}}) == 17
         assert required_java_major({"javaVersion": {"majorVersion": "21"}}) == 21
@@ -256,6 +236,41 @@ LAUNCH_JSON = {
     "assetIndex": {"id": "1.20"},
 }
 
+# Mirrors the rule-based structure of a real 1.20.4 version JSON.
+RULE_LAUNCH_JSON = {
+    "arguments": {
+        "jvm": [
+            {"rules": [{"action": "allow", "os": {"name": "osx"}}], "value": ["-XstartOnFirstThread"]},
+            {"rules": [{"action": "allow", "os": {"name": "windows"}}], "value": "-XX:HeapDumpPath=ignored"},
+            {"rules": [{"action": "allow", "os": {"arch": "x86"}}], "value": "-Xss1M"},
+            "-Djava.library.path=${natives_directory}",
+            "-Dminecraft.launcher.brand=${launcher_name}",
+            "-Dminecraft.launcher.version=${launcher_version}",
+            "-cp",
+            "${classpath}",
+        ],
+        "game": [
+            "--username ${auth_player_name}",
+            "--version ${version_name}",
+            "--gameDir ${game_directory}",
+            "--assetsDir ${assets_root}",
+            "--assetIndex ${assets_index_name}",
+            "--uuid ${auth_uuid}",
+            "--accessToken ${auth_access_token}",
+            "--clientId ${clientid}",
+            "--userType ${user_type}",
+            "--versionType ${version_type}",
+            {
+                "rules": [{"action": "allow", "features": {"has_custom_resolution": True}}],
+                "value": ["--width", "${resolution_width}", "--height", "${resolution_height}"],
+            },
+            {"rules": [{"action": "allow", "features": {"is_demo_user": True}}], "value": "--demo"},
+        ],
+    },
+    "mainClass": "net.minecraft.client.main.Main",
+    "assetIndex": {"id": "1.20"},
+}
+
 
 class TestLaunchArgs:
     def test_jvm_args(self) -> None:
@@ -310,15 +325,84 @@ class TestLaunchArgs:
         assert "--fabric" in cmd
         assert "com.fabricmc.KnotClient" in cmd
 
+    def test_jvm_args_rule_based_osx_includes_xstart(self) -> None:
+        args = jvm_args(RULE_LAUNCH_JSON, natives_dir="/natives", os_name="osx", arch="x86_64")
+        assert "-XstartOnFirstThread" in args
+        assert "-XX:HeapDumpPath=ignored" not in args  # windows-only rule
+        assert "-Xss1M" not in args  # x86-only rule
+        assert "-Djava.library.path=/natives" in args
+        assert "-Dminecraft.launcher.brand=orzmc" in args  # ${launcher_name} substituted
+        assert "${" not in " ".join(args)
 
-# ── plan ────────────────────────────────────────────────────────────────────
+    def test_jvm_args_rule_based_linux_excludes_xstart(self) -> None:
+        args = jvm_args(RULE_LAUNCH_JSON, natives_dir="/natives", os_name="linux", arch="x86_64")
+        assert "-XstartOnFirstThread" not in args
+        assert "-Xss1M" not in args
 
+    def test_jvm_args_rule_based_x86(self) -> None:
+        args = jvm_args(RULE_LAUNCH_JSON, natives_dir="/natives", os_name="linux", arch="x86")
+        assert "-Xss1M" in args
 
-class TestPlan:
-    def test_steps_chain(self) -> None:
-        plan = Plan([Step("a", lambda ctx: {"value": 1}), Step("b", lambda ctx: {"value": ctx["value"] + 1})])
-        assert plan.run()["value"] == 2
+    def test_game_args_token_substitution_and_rules(self) -> None:
+        options = RuntimeOptions(version="1.20.4", username="tester")
+        paths = PathLayout(root="/base", version="1.20.4")
+        args = game_args(RULE_LAUNCH_JSON, options, paths)
+        assert "${" not in " ".join(args)
+        assert args[args.index("--username") + 1] == "tester"
+        assert args[args.index("--version") + 1] == "1.20.4"
+        assert args[args.index("--gameDir") + 1] == "/base/versions/1.20.4/client"
+        assert args[args.index("--assetIndex") + 1] == "1.20"
+        assert "--width" not in args  # has_custom_resolution defaults false
+        assert "--demo" not in args  # is_demo_user defaults false
 
-    def test_ctx_injected(self) -> None:
-        plan = Plan([Step("inc", lambda ctx: {"value": ctx.get("value", 0) + 1})])
-        assert plan.run({"value": 10})["value"] == 11
+    def test_game_args_separate_tokens_keep_empty_values(self) -> None:
+        # The real 1.20.4 JSON stores "--flag" and "${value}" as separate
+        # entries; an empty substituted value (clientId/xuid) must stay so
+        # flag/value pairs remain aligned for the game's OptionParser.
+        options = RuntimeOptions(version="1.20.4", username="tester")
+        paths = PathLayout(root="/base", version="1.20.4")
+        json = {
+            "arguments": {
+                "game": [
+                    "--uuid",
+                    "${auth_uuid}",
+                    "--accessToken",
+                    "${auth_access_token}",
+                    "--clientId",
+                    "${clientid}",
+                    "--xuid",
+                    "${auth_xuid}",
+                    "--userType",
+                    "${user_type}",
+                ]
+            }
+        }
+        args = game_args(json, options, paths, auth_uuid="00000000-0000-0000-0000-000000000000")
+        assert args[args.index("--uuid") + 1] == "00000000-0000-0000-0000-000000000000"
+        assert args[args.index("--accessToken") + 1] == "0"
+        assert args[args.index("--clientId") + 1] == ""
+        assert args[args.index("--xuid") + 1] == ""
+        assert args[args.index("--userType") + 1] == "legacy"
+
+    def test_game_args_default_uuid_is_valid(self) -> None:
+        # The game calls UUID.fromString on --uuid; the default must be a
+        # well-formed random UUID (like the official launcher's offline session).
+        import uuid as _uuid
+
+        options = RuntimeOptions(version="1.20.4", username="tester")
+        paths = PathLayout(root="/base", version="1.20.4")
+        args = game_args(
+            {"arguments": {"game": ["--uuid", "${auth_uuid}"]}},
+            options,
+            paths,
+        )
+        value = args[args.index("--uuid") + 1]
+        assert _uuid.UUID(value).version == 4
+
+    def test_game_args_legacy_template_substitution(self) -> None:
+        options = RuntimeOptions(version="1.16.5", username="tester")
+        paths = PathLayout(root="/base", version="1.16.5")
+        json = {"minecraftArguments": "--username ${auth_player_name} --version ${version_name}"}
+        args = game_args(json, options, paths)
+        assert args[args.index("--username") + 1] == "tester"
+        assert args[args.index("--version") + 1] == "1.16.5"

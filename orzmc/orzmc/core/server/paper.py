@@ -1,7 +1,9 @@
-"""Paper download API v2 adapter (the only supported Paper API)."""
+"""Paper server core: resolve the latest Paper build and download it."""
 
 from __future__ import annotations
 
+from orzmc.core.server.base import CoreProvider, ServerPrepare
+from orzmc.domain.types import GameType
 from orzmc.infra.http import HttpClient
 
 API_BASE = "https://api.papermc.io/v2"
@@ -46,3 +48,19 @@ def _match_version(available: list[str], mc_version: str) -> str | None:
         return None
     # versions are ordered oldest→newest; pick the last
     return candidates[-1]
+
+
+class PaperProvider(CoreProvider):
+    game_type = GameType.PAPER
+
+    def obtain(self, prepare: ServerPrepare) -> None:
+        url = PaperAPI(prepare.http).download_url(prepare.version)
+        prepare.download(
+            url,
+            prepare.paths.server_jar_path(),
+            f"下载 Paper {prepare.version}",
+            force=prepare.force_download,
+        )
+
+
+CoreProvider.register(PaperProvider())

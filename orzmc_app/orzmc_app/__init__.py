@@ -1,7 +1,6 @@
-"""OrzMC application: Textual TUI + typer CLI, built on the orzmc library.
+"""OrzMC application: typer CLI, built on the orzmc library.
 
-The app layer only calls the library's public API (``orzmc/__init__.py``) and
-injects its own ``Reporter`` / ``ProgressSink`` implementations for the TUI.
+The app layer only calls the library's public API (``orzmc/__init__.py``).
 """
 
 from __future__ import annotations

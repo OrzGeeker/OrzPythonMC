@@ -1,11 +1,10 @@
-"""Shared model for optional client add-ons (OptiFine / Fabric profiles)."""
+"""Shared model for optional client add-ons (Fabric / Forge profiles)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from orzmc.domain.libraries import Library
-from orzmc.infra.fs import FileStore
 
 
 @dataclass
@@ -20,9 +19,6 @@ class ProfileAddon:
     jvm_args: list[str] = field(default_factory=list)
     game_args: list[str] = field(default_factory=list)
     main_class: str | None = None
-
-
-def read_json_if_exists(fs: FileStore, path: str) -> dict | None:
-    if not fs.is_file(path):
-        return None
-    return fs.read_json(path)
+    # Forge ships its own patched game jar: when set, the vanilla client jar is
+    # excluded from the classpath so its unpatched classes cannot shadow it.
+    uses_own_client_jar: bool = False

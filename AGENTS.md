@@ -5,12 +5,12 @@
 
 ## 项目定位
 
-OrzMC 是一个跨平台 Minecraft **客户端启动 / 服务端部署** CLI + TUI 工具。**应用 + 库**双层结构:
+OrzMC 是一个跨平台 Minecraft **客户端启动 / 服务端部署** CLI 工具。**应用 + 库**双层结构:
 
-- **`orzmc`(库)**:可复用能力,独立发布到 PyPI,高测试覆盖。零框架依赖(仅 requests / beautifulsoup4 / pyyaml / rich)。
-- **`orzmc-app`(应用)**:Textual TUI + typer CLI,提供 `orzmc` 命令。只调用库的**公共 API**,不触碰库内部实现。
+- **`orzmc`(库)**:可复用能力,独立发布到 PyPI,高测试覆盖。零框架依赖(仅 requests / rich)。
+- **`orzmc-app`(应用)**:typer CLI(rich 交互提示),提供 `orzmc` 命令。只调用库的**公共 API**,不触碰库内部实现。
 
-用户最终体验:无参 `orzmc` 打开 TUI;`orzmc client/server` 等直接命令行使用;版本缺失自动安装;Java 运行时沙盒托管在应用目录下,不依赖系统 java。
+用户最终体验:无参 `orzmc` 打印帮助;`orzmc client/server` 等直接命令行使用;版本缺失自动安装;Java 运行时沙盒托管在应用目录下,不依赖系统 java。
 
 ## 技术选型
 
@@ -19,21 +19,22 @@ OrzMC 是一个跨平台 Minecraft **客户端启动 / 服务端部署** CLI + T
 | 包管理 | **uv**(workspace) | 根 pyproject 声明成员;`uv.lock` 提交入库,保证可复现 |
 | 构建 | hatchling | 库版本动态读取自 `orzmc/version.py`(唯一版本源) |
 | Python | `>=3.10` | 工具链固定 **3.12**(`uv python pin 3.12`) |
-| TUI | Textual | 无参入口 |
-| CLI | typer | 子命令结构 |
+| CLI | typer | 子命令结构;无参打印帮助 |
 | 测试 | pytest + ruff + mypy | 库测试不打真实网络 / 系统 java |
 
 ## 架构与依赖方向
 
 ```
-orzmc_app(应用:cli/ + ui/)  →  orzmc 公共 API
+orzmc_app(应用:cli/)  →  orzmc 公共 API
 orzmc/services → orzmc/core → orzmc/domain + orzmc/infra
 ```
 
-- **依赖只允许单向向下**:`domain` 与 `infra` 最底层;`core` 适配外部 API(Mojang/Forge/Paper/Adoptium);`services` 编排用例。
-- **协议解耦**:`orzmc/infra/log.py` 定义 `Reporter`,`orzmc/infra/progress.py` 定义 `ProgressSink`。库内置 rich 默认实现;应用层注入 Textual 实现。**禁止**库内直接 `print` / `os.system`。
+- **依赖只允许单向向下**:`domain` 与 `infra` 最底层;`core` 适配外部 API(Mojang 元数据、Fabric/Forge 附加件、服务端核心策略);`services` 编排用例。
+- **客户端/服务端核心策略(对称镜像)**:`core/server/` 定义 `CoreProvider` 抽象 + `ServerPrepare` 注入接口,`vanilla/paper/fabric/forge` 四个 provider 自注册;`core/client/` 定义 `ClientProvider` 抽象 + `ClientPrepare` 注入接口,`vanilla/fabric/forge` 三个 provider 自注册(paper 无客户端,返回 `None`)。`ClientService`/`ServerService` 只按 `GameType` 分发,**改一种类型不影响其它类型实现**。各 provider 的 Forge/Fabric 复杂度收敛在各自文件内;`core` **不 import services 层**——`download`/`resolve_build_java` 等编排 seam 由 services 注入(依赖倒置),Provider 内只依赖 domain + infra。
+- **Forge 用 Maven API**:`core/forge.py` 以 `promotions_slim.json` 解析 `<mc>-<build>` 版本、下载官方安装器;客户端/服务端 provider 共用。客户端启动定义嵌在安装器内 `version.json`,用 `zipfile` 读取(无需运行安装器);服务端用 `--installServer` 安装。不再做 HTML 抓取。
+- **协议解耦**:`orzmc/infra/log.py` 定义 `Reporter`,`orzmc/infra/progress.py` 定义 `ProgressSink`。库内置 rich 默认实现(`RichReporter`/`RichProgress`)。**禁止**库内直接 `print` / `os.system`。
 - **路径纯函数**:`PathLayout`(domain)只拼路径、**不建目录**;建目录统一在 service 内 `fs.ensure_dir`。
-- **Java 沙盒**:运行时安装在 `<root>/java/<major>/`,用 `bin/java` 启动;版本要求读自版本 JSON `javaVersion.majorVersion`(缺失默认 8)。JRE 优先,仅 Spigot 构建需 JDK。
+- **Java 沙盒**:运行时安装在 `<root>/java/<major>/`,用 `bin/java` 启动;版本要求读自版本 JSON `javaVersion.majorVersion`(缺失默认 8)。JRE 即可满足所有类型运行,无需完整 JDK。
 
 ## 目录结构
 
@@ -45,10 +46,13 @@ python/                         # uv workspace 根
     pyproject.toml
     orzmc/  version.py  __init__.py
             domain/  infra/  core/  services/
+            core/     mojang.py  fabric.py  forge.py  profiles.py
+                      client/   # ClientProvider 策略:vanilla/fabric/forge
+                      server/   # CoreProvider 策略:vanilla/paper/fabric/forge
     tests/
   orzmc_app/                    # 应用包(name="orzmc-app")
     pyproject.toml
-    orzmc_app/  cli/  ui/  __init__.py
+    orzmc_app/  cli/  __init__.py
     tests/
 ```
 
@@ -58,11 +62,11 @@ python/                         # uv workspace 根
 <root>/
   versions/<mc_version>/          # 一版本一目录,客户端/服务端并存
     client/  assets/  libraries/  natives/  profiles/
-             <version>.jar  <version>.json  launcher_profiles.json
-    server/<server_type>/         # vanilla|paper|spigot|forge
+             <version>.jar  launcher_profiles.json
+    server/<server_type>/         # vanilla|paper|fabric|forge
       <core>.jar  eula.txt  server.properties  commands.yml  world/  plugins/
   java/<java_major>/              # 托管 JRE/JDK,不依赖系统 java
-  cache/version_manifest.json  cache/download_tmp/
+  cache/version_manifest.json  cache/versions/  cache/download_tmp/
   backup/worlds/  backup/music/<v>/
 ```
 
@@ -75,9 +79,8 @@ uv run ruff check .                 # lint
 uv run ruff format --check .        # 格式检查
 uv run --all-packages pytest        # 全部测试
 uv run mypy                         # 类型检查
-uv run orzmc --help                 # 应用子命令树
+uv run orzmc --help                 # 应用子命令树(无子命令时同样打印帮助)
 uv run orzmc version                # 打印版本(读取库 version.py)
-uv run orzmc tui                    # 打开 TUI
 uv build --all-packages            # 构建 sdist+wheel(库与应用)
 uv publish                         # 发布到 PyPI
 uv run --package orzmc-app python scripts/build.py   # PyInstaller 单文件二进制 → dist/
@@ -88,7 +91,7 @@ uv lock                            # 锁定依赖
 
 - **ruff**:`select = E,F,W,I,UP,B,SIM,C4,RUF`,`line-length = 120`;isort first-party = `orzmc, orzmc_app`。
 - **mypy**:`check_untyped_defs`,`no_implicit_optional`。
-- **pytest**:库测试用 **fake `Reporter`/`ProgressSink`/内存文件系统**,直接打公共 API 与 domain;不碰网络、不碰系统 java。测试文件放 `orzmc/tests/`、`orzmc_app/tests/`。
+- **pytest**:库测试用 **fake `Reporter`/`ProgressSink`/`HttpClient` + 真实 tmp 目录**(见 `orzmc/tests/fakes.py`),直接打公共 API 与 domain;不碰网络、不碰系统 java。测试文件放 `orzmc/tests/`、`orzmc_app/tests/`。
 - **导入规范**:库内按层引用(`from orzmc.domain...`);应用只 `from orzmc import ...` 公共 API。
 - **异常**:网络 / 文件错误在 service 层统一捕获并转 `RuntimeError`(中文消息),不裸抛 requests 异常。
 - **类型注解**:公共 API 全量注解;`from __future__ import annotations` 开头。
@@ -99,7 +102,7 @@ uv lock                            # 锁定依赖
 
 1. **先在库实现 + 测试**:在 `orzmc/` 对应层改代码,`orzmc/tests/` 补用例;`uv run --all-packages pytest` 全绿后再进应用层。
 2. **再暴露公共 API**:把新能力加入 `orzmc/__init__.py`(公共 API 即契约,改动要谨慎)。
-3. **应用层调用**:`orzmc_app/cli/`、`orzmc_app/ui/` 只调用公共 API,不 import 库内部模块。
+3. **应用层调用**:`orzmc_app/cli/` 只调用公共 API,不 import 库内部模块。
 4. **跑全部门禁**:`ruff` → `mypy` → `pytest` → `uv build` 全过。
 5. **更新本文件**:涉及架构 / 命令 / 目录结构 / 规范的变更,同步更新 AGENTS.md(并考虑 README)。
 6. 关键决策记录在本文件,避免各智能体行为漂移。

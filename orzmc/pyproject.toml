@@ -21,8 +21,6 @@ classifiers = [
 ]
 dependencies = [
     "requests>=2.31",
-    "beautifulsoup4>=4.12",
-    "pyyaml>=6.0",
     "rich>=13.7",
 ]
 

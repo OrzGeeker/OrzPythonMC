@@ -6,10 +6,9 @@ import os
 import shlex
 from collections.abc import Callable
 
-from orzmc.core.forge import Forge
-from orzmc.core.paperapi import PaperAPI
-from orzmc.core.spigot import Spigot
+from orzmc.core.server import CoreProvider, ServerPrepare
 from orzmc.domain.java import required_java_major
+from orzmc.domain.launch import memory_args, user_jvm_opts
 from orzmc.domain.types import GameType
 from orzmc.services.context import Services
 
@@ -37,12 +36,12 @@ class ServerService:
         gt = self.game_type
         self._reporter.info(f"服务端 {version} ({gt.value})")
 
-        version_json = self._services.downloader.fetch_version_json(version, is_client=False)
+        version_json = self._services.mojang.version_json(version)
         major = required_java_major(version_json)
 
         self._prepare(version_json, major, confirm_java, confirm_eula)
 
-        java_bin = self._services.java_env.resolve(major, need_jdk=gt.needs_jdk, confirm=confirm_java)
+        java_bin = self._services.resolve_java(major, confirm=confirm_java)
         cmd = self._build_server_command(java_bin)
 
         self._reporter.success(f"启动服务端 {version} ({gt.value})...")
@@ -61,23 +60,10 @@ class ServerService:
         confirm_java: Callable[[int, bool], bool] | None,
         confirm_eula: Callable[[], bool] | None,
     ) -> None:
-        gt = self.game_type
-        downloader = self._services.downloader
-
-        if gt == GameType.VANILLA:
-            url = (version_json.get("downloads", {}).get("server") or {}).get("url")
-            if not url:
-                raise RuntimeError("该版本没有官方服务端下载")
-            downloader.download_file(url, self._paths.server_jar_path(), f"下载服务端 {self._options.version}")
-        elif gt == GameType.PAPER:
-            url = PaperAPI(self._http).download_url(self._options.version or "")
-            downloader.download_file(url, self._paths.server_jar_path(), f"下载 Paper {self._options.version}")
-        elif gt == GameType.SPIGOT:
-            self._build_spigot(major, confirm_java)
-        elif gt == GameType.FORGE:
-            self._build_forge(major, confirm_java)
-        else:
-            raise ValueError(f"不支持的服务端类型: {gt.value}")
+        provider = CoreProvider.for_type(self.game_type)
+        if provider is None:
+            raise ValueError(f"不支持的服务端类型: {self.game_type.value}")
+        provider.obtain(self._server_prepare(version_json, major, confirm_java))
 
         self._accept_eula(confirm_eula)
         self._write_server_properties()
@@ -86,55 +72,27 @@ class ServerService:
         if self._options.force_upgrade:
             self._reporter.info("已启用 --forceUpgrade(世界格式升级)")
 
-    def _build_spigot(self, major: int, confirm_java: Callable[[int, bool], bool] | None) -> None:
-        version = self._options.version or ""
-        build_dir = self._paths.server_build_dir()
-        self._fs.ensure_dir(build_dir)
-        buildtools = os.path.join(build_dir, "BuildTools.jar")
-        self._services.downloader.download_file(Spigot.BUILD_TOOLS_URL, buildtools, "下载 BuildTools")
-        # BuildTools needs a modern JDK (>=17); the server itself runs on `major`.
-        build_java = self._services.java_env.resolve(max(major, 17), need_jdk=True, confirm=confirm_java)
-        self._reporter.info("正在使用 BuildTools 构建 Spigot(耗时较长)...")
-        code = self._services.process.run_stream(
-            [build_java, "-jar", "BuildTools.jar", "--rev", version],
-            on_line=lambda line: self._reporter.plain(line),
-            cwd=build_dir,
+    def _server_prepare(
+        self,
+        version_json: dict,
+        major: int,
+        confirm_java: Callable[[int, bool], bool] | None,
+    ) -> ServerPrepare:
+        """Wire the CoreProvider seams: services layer provides the orchestration."""
+        return ServerPrepare(
+            version=self._options.version or "",
+            version_json=version_json,
+            major=major,
+            force_download=self._options.force_download,
+            confirm_java=confirm_java,
+            paths=self._paths,
+            fs=self._fs,
+            reporter=self._reporter,
+            http=self._http,
+            process=self._services.process,
+            download=self._services.downloader.download_file,
+            resolve_build_java=self._services.java_env.resolve,
         )
-        if code != 0:
-            raise RuntimeError("Spigot 构建失败")
-        src = os.path.join(build_dir, f"spigot-{version}.jar")
-        if not self._fs.is_file(src):
-            raise RuntimeError(f"未找到构建产物: {src}")
-        self._fs.move(src, self._paths.server_jar_path())
-
-    def _build_forge(self, major: int, confirm_java: Callable[[int, bool], bool] | None) -> None:
-        version = self._options.version or ""
-        forge = Forge(self._http, version)
-        forge.discover()
-        build_dir = self._paths.server_build_dir()
-        self._fs.ensure_dir(build_dir)
-        installer = os.path.join(build_dir, f"forge-{forge.full_version}-installer.jar")
-        self._services.downloader.download_file(
-            forge.forge_installer_url or "", installer, f"下载 Forge 安装器 {forge.full_version}"
-        )
-        java_bin = self._services.java_env.resolve(major, need_jdk=False, confirm=confirm_java)
-        self._reporter.info(f"正在安装 Forge {forge.full_version}...")
-        code = self._services.process.run_stream(
-            [java_bin, "-jar", installer, "--installServer"],
-            on_line=lambda line: self._reporter.plain(line),
-            cwd=build_dir,
-        )
-        if code != 0:
-            raise RuntimeError("Forge 安装失败")
-        candidates = [
-            os.path.join(build_dir, f"forge-{forge.full_version}.jar"),
-            os.path.join(build_dir, f"{version}-forge.jar"),
-            os.path.join(build_dir, f"{version}-forge-universal.jar"),
-        ]
-        found = next((c for c in candidates if self._fs.is_file(c)), None)
-        if not found:
-            raise RuntimeError("未找到 Forge 服务端产物")
-        self._fs.move(found, self._paths.server_jar_path())
 
     def _accept_eula(self, confirm_eula: Callable[[], bool] | None) -> None:
         if self._options.yes:
@@ -170,10 +128,8 @@ class ServerService:
         self._fs.ensure_symlink(world, src)
 
     def _build_server_command(self, java_bin: str) -> list[str]:
-        cmd = [java_bin]
-        if self._options.jvm_opts:
-            cmd += shlex.split(self._options.jvm_opts)
-        cmd += [f"-Xms{self._options.min_mem}", f"-Xmx{self._options.max_mem}", "-jar", self._paths.server_jar_path()]
+        cmd = [java_bin, *user_jvm_opts(self._options), *memory_args(self._options)]
+        cmd += ["-jar", self._paths.server_jar_path()]
         if self._options.server_args:
             cmd += shlex.split(self._options.server_args)
         if self._options.force_upgrade and "--forceUpgrade" not in cmd:

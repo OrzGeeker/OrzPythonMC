@@ -1,4 +1,4 @@
-"""File preparation: client/server assets, libraries, natives, version metadata."""
+"""File preparation: client/server assets, libraries, natives."""
 
 from __future__ import annotations
 
@@ -28,33 +28,22 @@ class Downloader:
         fs: FileStore,
         reporter: Reporter,
         sink: ProgressSink,
-        mojang: Mojang,
         paths: PathLayout,
     ) -> None:
         self._http = http
         self._fs = fs
         self._reporter = reporter
         self._sink = sink
-        self._mojang = mojang
         self._paths = paths
-
-    # ── metadata ────────────────────────────────────────────────────────────
-
-    def fetch_version_json(self, version: str, is_client: bool) -> dict:
-        """Download (if missing) and return the Mojang version JSON for ``version``."""
-        dest = self._paths.client_json_path() if is_client else os.path.join(self._paths.cache_dir(), f"{version}.json")
-        info = self._mojang.version_json_url_and_sha1(version)
-        if not info:
-            raise RuntimeError(f"未知的 Minecraft 版本: {version}")
-        url, sha1 = info
-        self.download_file(url, dest, f"下载版本元数据 {version}", sha1)
-        return self._fs.read_json(dest)
 
     # ── single file ─────────────────────────────────────────────────────────
 
-    def download_file(self, url: str, dest: str, desc: str, sha1: str | None = None) -> bool:
-        """Download a single file (byte progress); skip when already valid."""
-        if not self._needs_download(dest, sha1):
+    def download_file(self, url: str, dest: str, desc: str, sha1: str | None = None, force: bool = False) -> bool:
+        """Download a single file (byte progress); skip when already valid.
+
+        Pass ``force=True`` to re-download even when the cached file looks valid.
+        """
+        if not force and not self._needs_download(dest, sha1):
             self._reporter.debug(f"已存在,跳过: {desc}")
             return False
         total = self._http.content_length(url)
@@ -134,7 +123,7 @@ class Downloader:
             self._reporter.debug(f"已解压 {extracted} 个原生库到 {natives_dir}")
 
     def write_launcher_profiles(self, version: str, username: str) -> None:
-        """Write a minimal official-launcher-style profiles file for OptiFine lookups."""
+        """Write a minimal official-launcher-style profiles file (the Forge installer reads it)."""
         profile_id = version if username == "guest" else f"{version}_{username}"
         launcher = {
             "authenticationDatabase": {},

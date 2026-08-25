@@ -14,7 +14,7 @@ def os_key() -> str:
     return "osx" if system == "darwin" else system
 
 
-def _os_arch() -> str:
+def os_arch() -> str:
     arch = platform.machine().lower()
     if arch in ("aarch64", "arm64"):
         return "arm64"
@@ -35,16 +35,25 @@ class Library:
     is_native: bool = False
 
 
-def _rules_allow(rules: list[dict] | None, os_name: str, os_arch: str) -> bool:
-    """Mojang library rules — same semantics as the official launcher.
+def rules_allow(
+    rules: list[dict] | None,
+    os_name: str,
+    os_arch: str,
+    features: dict | None = None,
+) -> bool:
+    """Mojang rules — same semantics as the official launcher.
 
-    A library without rules is always allowed. With rules, the last rule that
-    matches the current OS/arch decides the outcome; when no rule matches the
-    library is excluded. This is what keeps ``{allow, os: linux}`` natives off
-    macOS while still honouring ``{allow, os: linux}, {disallow, os: osx}`` pairs.
+    Used for both library rules and ``arguments`` rule entries. A rule-less item
+    is always allowed. With rules, the last rule that matches the current
+    OS/arch/features decides the outcome; when no rule matches the item is
+    excluded. This keeps ``{allow, os: linux}`` natives off macOS while honouring
+    ``{allow, os: linux}, {disallow, os: osx}`` pairs, and lets game args like
+    ``{rules: [{features: {has_custom_resolution: true}}], value: --width}``
+    resolve against the current feature set.
     """
     if not rules:
         return True
+    features = features or {}
     allowed = False
     for rule in rules:
         action = rule.get("action", "allow")
@@ -56,6 +65,9 @@ def _rules_allow(rules: list[dict] | None, os_name: str, os_arch: str) -> bool:
             matched = False
         if arch and arch != os_arch:
             matched = False
+        for feature, required in (rule.get("features") or {}).items():
+            if bool(features.get(feature)) != bool(required):
+                matched = False
         if matched:
             allowed = action == "allow"
     return allowed
@@ -82,17 +94,17 @@ def _artifact_path(coords: str, classifier: str | None = None) -> str:
 def resolve_libraries(
     version_json: dict,
     os_name: str | None = None,
-    os_arch: str | None = None,
+    arch: str | None = None,
 ) -> list[Library]:
     """Resolve the full library list (including OS natives) for a version JSON.
 
     Pure function — no network or filesystem access.
     """
     os_name = os_name or os_key()
-    os_arch = os_arch or _os_arch()
+    arch = arch or os_arch()
     libraries: list[Library] = []
     for lib in version_json.get("libraries", []):
-        if not _rules_allow(lib.get("rules"), os_name, os_arch):
+        if not rules_allow(lib.get("rules"), os_name, arch):
             continue
         coords = lib.get("name")
         if not coords:

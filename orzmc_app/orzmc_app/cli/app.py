@@ -1,8 +1,8 @@
 """Typer CLI: subcommands that call only the orzmc library public API.
 
-``orzmc`` (no subcommand) opens the Textual TUI; every subcommand also works
-as a plain non-interactive command line (version defaults to Mojang latest
-when neither ``-v`` nor a TTY prompt is available).
+``orzmc`` with no subcommand prints help; every subcommand works as a plain
+command line, with lightweight rich prompts when run interactively (version
+defaults to Mojang latest when neither ``-v`` nor a TTY prompt is available).
 """
 
 from __future__ import annotations
@@ -60,17 +60,16 @@ def _parse_type(value: str, *, client: bool) -> GameType:
     return game_type
 
 
-@app.callback(invoke_without_command=True, no_args_is_help=False)
+@app.callback(invoke_without_command=True)
 def root(ctx: typer.Context, verbose: Verbose = False) -> None:
     """OrzMC — Minecraft 客户端启动 / 服务端部署工具。
 
-    不带子命令时打开 TUI;也可直接使用子命令(如 ``orzmc client -v 1.20.4``)。
+    不带子命令时打印帮助;直接使用子命令(如 ``orzmc client -v 1.20.4``)。
     """
     ctx.obj = {"verbose": verbose}
     if ctx.invoked_subcommand is None:
-        from orzmc_app.ui.app import OrzMCApp
-
-        OrzMCApp().run()
+        _console.print(ctx.get_help(), markup=False)
+        raise typer.Exit(0)
 
 
 @app.command()
@@ -78,11 +77,9 @@ def client(
     ctx: typer.Context,
     version: Version = None,
     username: Username = "guest",
-    game_type: Annotated[str, typer.Option("--type", "-t", help="类型: vanilla|forge")] = "vanilla",
+    game_type: Annotated[str, typer.Option("--type", "-t", help="类型: vanilla|fabric|forge")] = "vanilla",
     min_mem: MinMem = "512M",
     max_mem: MaxMem = "2G",
-    optifine: Annotated[bool, typer.Option("--optifine", help="以 OptiFine 配置启动(需先装好)")] = False,
-    fabric: Annotated[bool, typer.Option("--fabric", help="以 Fabric 启动")] = False,
     extract_music: Annotated[bool, typer.Option("--extract-music", help="提取客户端音乐后退出")] = False,
     jvm_opts: JvmOpts = None,
     root_dir: RootDir = None,
@@ -91,8 +88,6 @@ def client(
     game_type_obj = _parse_type(game_type, client=True)
     _check_mem("min", min_mem)
     _check_mem("max", max_mem)
-    if optifine and fabric:
-        _fail("--optifine 与 --fabric 不能同时使用")
     resolved = resolve_version(version, root_dir)
     options = RuntimeOptions(
         is_client=True,
@@ -101,12 +96,9 @@ def client(
         game_type=game_type_obj.value,
         min_mem=min_mem,
         max_mem=max_mem,
-        optifine=optifine,
-        fabric=fabric,
         extract_music=extract_music,
         jvm_opts=jvm_opts,
         root_dir=root_dir,
-        verbose=bool(ctx.obj.get("verbose")),
     )
     reporter = RichReporter(verbose=bool(ctx.obj.get("verbose")))
     sink = RichProgress()
@@ -122,7 +114,7 @@ def client(
 def server(
     ctx: typer.Context,
     version: Version = None,
-    game_type: Annotated[str, typer.Option("--type", "-t", help="类型: vanilla|paper|spigot|forge")] = "vanilla",
+    game_type: Annotated[str, typer.Option("--type", "-t", help="类型: vanilla|paper|fabric|forge")] = "vanilla",
     min_mem: MinMem = "512M",
     max_mem: MaxMem = "2G",
     force_upgrade: Annotated[bool, typer.Option("--force-upgrade", help="服务端启动加 --forceUpgrade")] = False,
@@ -153,7 +145,6 @@ def server(
         jvm_opts=jvm_opts,
         server_args=server_args,
         root_dir=root_dir,
-        verbose=bool(ctx.obj.get("verbose")),
     )
     reporter = RichReporter(verbose=bool(ctx.obj.get("verbose")))
     sink = RichProgress()
@@ -233,14 +224,6 @@ def backup(
     except Exception as exc:
         _fail(str(exc))
     _console.print(f"[success]备份完成:[/success] {dest}")
-
-
-@app.command()
-def tui() -> None:
-    """打开图形化 TUI。"""
-    from orzmc_app.ui.app import OrzMCApp
-
-    OrzMCApp().run()
 
 
 @app.command()

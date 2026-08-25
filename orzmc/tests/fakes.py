@@ -8,11 +8,12 @@ them directly. The tests directory is on ``sys.path`` under pytest's default
 from __future__ import annotations
 
 import os
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from orzmc.infra.http import HttpClient
 from orzmc.infra.log import Reporter
 from orzmc.infra.progress import ProgressSink
+from orzmc.infra.runner import ProcessRunner
 
 
 class FakeReporter(Reporter):
@@ -61,14 +62,19 @@ class FakeSink(ProgressSink):
 
 
 class FakeHttp(HttpClient):
-    """Rejects any real network access; tests seed ``canned_archive``.
+    """Rejects any real network access; tests seed responses per URL.
 
-    Subclasses ``HttpClient`` (without its session) so mypy treats it as the
-    real type; any method added to ``HttpClient`` must be overridden here.
+    ``json_responses`` maps a URL substring to a JSON value; ``canned`` maps a
+    URL substring to raw download bytes; ``canned_archive`` remains a fallback
+    for single-download tests. Subclasses ``HttpClient`` (without its session)
+    so mypy treats it as the real type; any method added to ``HttpClient`` must
+    be overridden here.
     """
 
     def __init__(self) -> None:
         self.canned_archive: bytes | None = None
+        self.canned: dict[str, bytes] = {}
+        self.json_responses: dict[str, Any] = {}
         self.requests: list[tuple[str, str]] = []
 
     def content_length(self, url: str) -> int | None:
@@ -79,17 +85,58 @@ class FakeHttp(HttpClient):
 
     def download(self, url: str, dest_path: str, on_chunk=None) -> int:
         self.requests.append(("download", url))
-        if self.canned_archive is None:
-            raise AssertionError(f"unexpected download: {url}")
+        data = _longest_match(url, self.canned)
+        if data is None:
+            if self.canned_archive is None:
+                raise AssertionError(f"unexpected download: {url}")
+            data = self.canned_archive
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
-            f.write(self.canned_archive)
+            f.write(data)
         if on_chunk:
-            on_chunk(len(self.canned_archive))
-        return len(self.canned_archive)
+            on_chunk(len(data))
+        return len(data)
 
     def get_json(self, url: str, params: dict[str, str] | None = None):
-        raise AssertionError(f"unexpected get_json: {url}")
+        value = _longest_match(url, self.json_responses)
+        if value is None:
+            raise AssertionError(f"unexpected get_json: {url}")
+        return value
 
     def get_text(self, url: str, params: dict[str, str] | None = None):
         raise AssertionError(f"unexpected get_text: {url}")
+
+
+class FakeProcess(ProcessRunner):
+    """Records subprocess commands and, optionally, creates files after each run.
+
+    ``created`` lists absolute paths the fake writes after ``run_stream`` — this
+    simulates an installer producing its artifacts, so providers that verify a
+    product file exists (forge shim, fabric-server-launch.jar) work offline.
+    """
+
+    def __init__(self, code: int = 0, created: list[str] | None = None) -> None:
+        self.code = code
+        self.calls: list[list[str]] = []
+        self.created = created or []
+
+    def run_stream(self, cmd: list[str], on_line=None, cwd: str | None = None) -> int:
+        self.calls.append(list(cmd))
+        for path in self.created:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write("product")
+        if on_line:
+            for line in self.created:
+                on_line("created " + line)
+        return self.code
+
+    @property
+    def last_cmd(self) -> list[str] | None:
+        return self.calls[-1] if self.calls else None
+
+
+def _longest_match(url: str, table: dict[str, Any]) -> Any | None:
+    """Return the value whose key is the longest substring of ``url``."""
+    best = max((key for key in table if key in url), key=len, default=None)
+    return table.get(best) if best is not None else None

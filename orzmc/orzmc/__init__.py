@@ -9,12 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from orzmc.domain.java import DEFAULT_JAVA_MAJOR, parse_java_major, required_java_major
+from orzmc.domain.java import DEFAULT_JAVA_MAJOR, required_java_major
 from orzmc.domain.launch import DEFAULT_MAIN_CLASS, build_launch_command, game_args, jvm_args
 from orzmc.domain.libraries import Library, resolve_libraries
 from orzmc.domain.options import RuntimeOptions
 from orzmc.domain.paths import DEFAULT_ROOT, PathLayout
-from orzmc.domain.plan import Plan, Step
 from orzmc.domain.types import GameType
 from orzmc.infra.fs import FileStore
 from orzmc.infra.log import NullReporter, Reporter, RichReporter
@@ -40,7 +39,6 @@ __all__ = [
     "NullProgress",
     "NullReporter",
     "PathLayout",
-    "Plan",
     "ProgressSink",
     # protocols & impls
     "Reporter",
@@ -51,7 +49,6 @@ __all__ = [
     "ServerService",
     # services
     "Services",
-    "Step",
     "VersionManager",
     # versions
     "__version__",
@@ -64,7 +61,6 @@ __all__ = [
     # entry points
     "launch_client",
     "list_versions",
-    "parse_java_major",
     "remote_versions",
     "remove_version",
     "required_java_major",

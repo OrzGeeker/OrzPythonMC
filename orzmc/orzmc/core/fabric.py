@@ -19,8 +19,8 @@ class Fabric:
 
     def profile(self) -> ProfileAddon:
         """Resolve the fabric-loader profile json for this MC version."""
-        loader_version = self.loader or self._latest_loader_version()
-        installer_version = self._latest_installer_version()
+        loader_version = self.loader or self.latest_loader_version()
+        installer_version = self.latest_installer_version()
         url = f"{META_BASE}/versions/loader/{self.version}/{loader_version}/{installer_version}/profile/json"
         config: dict[str, Any] = self._http.get_json(url)
 
@@ -52,7 +52,8 @@ class Fabric:
 
         return ProfileAddon(libraries=libraries, jvm_args=jvm_args, game_args=game_args, main_class=main_class)
 
-    def _latest_loader_version(self) -> str:
+    def latest_loader_version(self) -> str:
+        """Latest stable fabric-loader version for this MC version."""
         entries = self._http.get_json(f"{META_BASE}/versions/loader/{self.version}")
         for entry in entries:
             loader = (entry or {}).get("loader", {})
@@ -62,7 +63,8 @@ class Fabric:
             return entries[0]["loader"]["version"]
         raise RuntimeError(f"Fabric 不支持 Minecraft {self.version}")
 
-    def _latest_installer_version(self) -> str:
+    def latest_installer_version(self) -> str:
+        """Latest stable fabric-installer version."""
         entries = self._http.get_json(f"{META_BASE}/versions/installer")
         for entry in entries:
             if entry.get("stable"):

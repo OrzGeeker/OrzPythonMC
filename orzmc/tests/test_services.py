@@ -5,21 +5,26 @@ All tests use a real tmp root + fakes for network; no system java is touched.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import tarfile
 
-from fakes import FakeHttp, FakeReporter, FakeSink
+from fakes import FakeHttp, FakeProcess, FakeReporter, FakeSink
 
 from orzmc import (
     ClientService,
     FileStore,
+    GameType,
     PathLayout,
     RuntimeOptions,
     ServerService,
     Services,
     resolve_libraries,
 )
+from orzmc.core.forge import PROMOTIONS_URL
+from orzmc.core.server import CoreProvider
+from orzmc.core.server.base import ServerPrepare
 from orzmc.services.java import JavaEnv
 
 
@@ -67,6 +72,89 @@ class TestJavaEnv:
         env = JavaEnv(http, fs, reporter, sink, paths)
         env.resolve(8, need_jdk=False)
         assert fs.is_file(paths.java_bin(8))
+
+    def test_resolve_java_uses_jre_for_every_type(self, tmp_path, reporter, sink, http) -> None:
+        # Every supported type runs on a sandboxed JRE — no game type needs a
+        # full JDK at run time (fabric/forge install steps use JREs too).
+        http.canned_archive = _make_tar_gz({"jre-21/bin/java": "java\n"})
+        for game_type in ("vanilla", "paper", "fabric", "forge"):
+            services = _services(tmp_path, reporter, sink, http, game_type=game_type)
+            assert services.resolve_java(21) == services.context.paths.java_bin(21)
+            assert any("JRE 21" in text for text in reporter.texts)
+
+
+class TestMojangMeta:
+    def test_version_json_shared_cache(self, tmp_path, reporter, sink, http) -> None:
+        # Both client and server launch resolve the version JSON through this one
+        # Mojang path, cached once under cache/versions/ — never a per-role copy.
+        services = _services(tmp_path, reporter, sink, http)
+        paths = services.context.paths
+        services.fs.write_json(
+            paths.version_manifest_path(),
+            {"versions": [{"id": "1.20.4", "type": "release", "url": "https://meta/1.20.4.json", "sha1": ""}]},
+        )
+        http.canned_archive = b'{"javaVersion": {"majorVersion": 17}}'
+        parsed = services.mojang.version_json("1.20.4")
+        assert parsed["javaVersion"]["majorVersion"] == 17
+        assert services.fs.is_file(os.path.join(paths.version_jsons_dir(), "1.20.4.json"))
+        # second call is served from cache — no network traffic
+        http.requests.clear()
+        assert services.mojang.version_json("1.20.4") == parsed
+        assert http.requests == []
+
+    def test_version_json_url_sha1_recovered_from_content_address(self, tmp_path, reporter, sink, http) -> None:
+        # modern manifest entries drop the `sha1` field; the hash lives in the
+        # content-addressed URL and must still drive cache validation.
+        services = _services(tmp_path, reporter, sink, http)
+        paths = services.context.paths
+        url_sha = "c75d82e7fa6eca5a043dab0c6cf77cb8317644f4"
+        services.fs.write_json(
+            paths.version_manifest_path(),
+            {
+                "versions": [
+                    {
+                        "id": "26.2",
+                        "type": "release",
+                        "url": f"https://piston-meta.mojang.com/v1/packages/{url_sha}/26.2.json",
+                    }
+                ]
+            },
+        )
+        url_and_sha1 = services.mojang.version_json_url_and_sha1("26.2")
+        assert url_and_sha1 is not None
+        assert url_and_sha1[1] == url_sha
+
+    def test_version_json_content_address_cache_hit(self, tmp_path, reporter, sink, http) -> None:
+        # a cached JSON whose hash matches the content-addressed URL is reused
+        body = b'{"javaVersion": {"majorVersion": 25}}'
+        url_sha = hashlib.sha1(body).hexdigest()
+        services = _services(tmp_path, reporter, sink, http)
+        paths = services.context.paths
+        services.fs.write_json(
+            paths.version_manifest_path(),
+            {"versions": [{"id": "26.2", "type": "release", "url": f"https://meta/packages/{url_sha}/26.2.json"}]},
+        )
+        services.fs.ensure_dir(paths.version_jsons_dir())
+        services.fs.write_text(os.path.join(paths.version_jsons_dir(), "26.2.json"), body.decode())
+        assert services.mojang.version_json("26.2")["javaVersion"]["majorVersion"] == 25
+        assert http.requests == []
+
+    def test_version_json_cache_invalidated_on_sha1_mismatch(self, tmp_path, reporter, sink, http) -> None:
+        # a stale cached JSON must be re-downloaded and sha1-revalidated
+        body = b'{"javaVersion": {"majorVersion": 25}}'
+        url_sha = hashlib.sha1(body).hexdigest()
+        services = _services(tmp_path, reporter, sink, http)
+        paths = services.context.paths
+        services.fs.write_json(
+            paths.version_manifest_path(),
+            {"versions": [{"id": "26.2", "type": "release", "url": f"https://meta/packages/{url_sha}/26.2.json"}]},
+        )
+        cache = os.path.join(paths.version_jsons_dir(), "26.2.json")
+        services.fs.ensure_dir(paths.version_jsons_dir())
+        services.fs.write_text(cache, "stale")
+        http.canned_archive = body
+        assert services.mojang.version_json("26.2")["javaVersion"]["majorVersion"] == 25
+        assert services.fs.read_text(cache) == body.decode()
 
 
 class TestDownloader:
@@ -142,6 +230,139 @@ class TestServerService:
         assert content.count("online-mode=false") == 1
 
 
+class TestCoreProvider:
+    def test_registry_covers_all_game_types(self) -> None:
+        # every game type must map to a registered CoreProvider
+        for gt in GameType:
+            provider = CoreProvider.for_type(gt)
+            assert provider is not None, f"缺少 provider: {gt}"
+            assert provider.game_type == gt
+
+    def test_server_prepare_wires_services_seams(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http)
+        server = ServerService(services)
+        prepare = server._server_prepare({"javaVersion": {"majorVersion": 17}}, 17, confirm_java=None)
+        assert prepare.version == "1.20.4"
+        assert prepare.paths is services.context.paths
+        assert prepare.process is services.process
+        assert prepare.download == services.downloader.download_file
+        assert prepare.resolve_build_java == services.java_env.resolve
+
+    def test_vanilla_provider_rejects_missing_server_entry(self, tmp_path, reporter, sink, http) -> None:
+        # a version JSON without downloads.server must raise a clear error
+        services = _services(tmp_path, reporter, sink, http)
+        prepare = ServerService(services)._server_prepare({"downloads": {}}, 8, confirm_java=None)
+        provider = CoreProvider.for_type(GameType.VANILLA)
+        assert provider is not None
+        with pytest_raises(RuntimeError):
+            provider.obtain(prepare)
+
+
+def _server_prepare(
+    tmp_path,
+    *,
+    http: FakeHttp,
+    process: FakeProcess,
+    version_json: dict | None = None,
+    game_type: str = "vanilla",
+    version: str = "1.20.4",
+) -> ServerPrepare:
+    """Wire a ServerPrepare with fake seams for provider-level tests."""
+    paths = PathLayout(root=str(tmp_path), version=version, game_type=game_type)
+    fs = FileStore()
+
+    def fake_download(url: str, dest: str, desc: str, sha1: str | None = None, force: bool = False) -> bool:
+        fs.ensure_dir(os.path.dirname(dest))
+        with open(dest, "wb") as f:
+            f.write(b"fake jar")
+        return True
+
+    return ServerPrepare(
+        version=version,
+        version_json=version_json or {"downloads": {"server": {"url": "https://mojang/server.jar"}}},
+        major=17,
+        force_download=False,
+        confirm_java=None,
+        paths=paths,
+        fs=fs,
+        reporter=FakeReporter(),
+        http=http,
+        process=process,
+        download=fake_download,
+        resolve_build_java=lambda major, need_jdk=False, confirm=None: "/fake/java",
+    )
+
+
+class TestServerProviders:
+    def test_fabric_server_downloads_vanilla_and_runs_installer(self, tmp_path) -> None:
+        http = FakeHttp()
+        http.json_responses = {
+            "/versions/loader/1.20.4": [{"loader": {"version": "0.19.3", "stable": True}}],
+            "/versions/installer": [{"version": "1.1.2", "stable": True}],
+        }
+        paths = PathLayout(root=str(tmp_path), version="1.20.4", game_type="fabric")
+        launch_jar = paths.server_jar_path()  # server/fabric/fabric-server-launch.jar
+        process = FakeProcess(created=[launch_jar])
+        prepare = _server_prepare(tmp_path, http=http, process=process, game_type="fabric")
+        provider = CoreProvider.for_type(GameType.FABRIC)
+        assert provider is not None
+        provider.obtain(prepare)
+
+        # the Mojang-manifest vanilla server sits next to the fabric launcher
+        assert prepare.fs.is_file(os.path.join(paths.server_dir(), "server.jar"))
+        assert prepare.fs.is_file(launch_jar)
+        cmd = process.last_cmd
+        assert cmd is not None and "server" in cmd
+        i = cmd.index("server")
+        assert cmd[i + 1 : i + 5] == ["-dir", paths.server_dir(), "-mcversion", "1.20.4"]
+
+    def test_fabric_server_missing_launch_jar_raises(self, tmp_path) -> None:
+        http = FakeHttp()
+        http.json_responses = {
+            "/versions/loader/1.20.4": [{"loader": {"version": "0.19.3", "stable": True}}],
+            "/versions/installer": [{"version": "1.1.2", "stable": True}],
+        }
+        process = FakeProcess()  # creates nothing
+        prepare = _server_prepare(tmp_path, http=http, process=process, game_type="fabric")
+        provider = CoreProvider.for_type(GameType.FABRIC)
+        assert provider is not None
+        with pytest_raises(RuntimeError, match="未找到 Fabric 服务端产物"):
+            provider.obtain(prepare)
+
+    def test_forge_server_modern_shim_layout(self, tmp_path) -> None:
+        # ForgeBootstrap era: installer produces a shim jar + libraries/ tree;
+        # both must move into the server directory so the shim's relative
+        # Class-Path keeps resolving under its renamed server_jar_name.
+        http = FakeHttp()
+        http.json_responses[PROMOTIONS_URL] = {"promos": {"1.20.4-latest": "49.2.8"}}
+        paths = PathLayout(root=str(tmp_path), version="1.20.4", game_type="forge")
+        build_dir = paths.server_build_dir()
+        shim = os.path.join(build_dir, "forge-1.20.4-49.2.8-shim.jar")
+        lib_file = os.path.join(build_dir, "libraries", "net", "minecraftforge", "a.jar")
+        process = FakeProcess(created=[shim, lib_file])
+        prepare = _server_prepare(tmp_path, http=http, process=process, game_type="forge")
+        provider = CoreProvider.for_type(GameType.FORGE)
+        assert provider is not None
+        provider.obtain(prepare)
+
+        assert prepare.fs.is_file(paths.server_jar_path())  # shim moved + renamed
+        assert prepare.fs.is_file(os.path.join(paths.server_dir(), "libraries", "net", "minecraftforge", "a.jar"))
+        assert process.last_cmd is not None and "--installServer" in process.last_cmd
+
+    def test_forge_server_legacy_universal_jar(self, tmp_path) -> None:
+        # pre-1.17 era: a single runnable universal jar at the build dir top level
+        http = FakeHttp()
+        http.json_responses[PROMOTIONS_URL] = {"promos": {"1.16.5-latest": "36.2.39"}}
+        paths = PathLayout(root=str(tmp_path), version="1.16.5", game_type="forge")
+        universal = os.path.join(paths.server_build_dir(), "forge-1.16.5-36.2.39.jar")
+        process = FakeProcess(created=[universal])
+        prepare = _server_prepare(tmp_path, http=http, process=process, game_type="forge", version="1.16.5")
+        provider = CoreProvider.for_type(GameType.FORGE)
+        assert provider is not None
+        provider.obtain(prepare)
+        assert prepare.fs.is_file(paths.server_jar_path())
+
+
 class TestClientService:
     def test_build_classpath(self, tmp_path, reporter, sink, http) -> None:
         services = _services(tmp_path, reporter, sink, http)
@@ -157,6 +378,28 @@ class TestClientService:
         )
         assert paths.client_jar_path() in classpath
         assert paths.client_library_path(lib.path) in classpath
+
+    def test_build_classpath_includes_native_jars(self, tmp_path, reporter, sink, http) -> None:
+        # Modern Mojang format: native libraries (classifier embedded in the
+        # coordinates, e.g. org.lwjgl:lwjgl:3.4.1:natives-macos-arm64) must stay on
+        # the classpath — the game self-extracts them from there. Excluding them is
+        # what crashed the client with "Failed to locate library: liblwjgl.dylib".
+        services = _services(tmp_path, reporter, sink, http)
+        paths = services.context.paths
+        fs = services.fs
+        rel_path = "org/lwjgl/lwjgl/3.4.1/lwjgl-3.4.1-natives-macos-arm64.jar"
+        native: dict = {
+            "name": "org.lwjgl:lwjgl:3.4.1:natives-macos-arm64",
+            "rules": [{"action": "allow", "os": {"name": "osx"}}],
+            "downloads": {"artifact": {"path": rel_path, "url": "https://libraries.minecraft.net/" + rel_path}},
+        }
+        fs.write_text(paths.client_jar_path(), "jar")
+        native_path = paths.client_library_path(rel_path)
+        fs.write_text(native_path, "jar")
+
+        client = ClientService(services)
+        classpath = client._build_classpath({"libraries": [native]}, None)
+        assert native_path in classpath
 
     def test_run_requires_version(self, tmp_path, reporter, sink, http) -> None:
         # a client run on an empty root must raise a clear error, not hang on the network
@@ -183,7 +426,7 @@ def _make_tar_gz(files: dict[str, str]) -> bytes:
     return buf.getvalue()
 
 
-def pytest_raises(exc):
+def pytest_raises(exc, **kwargs):
     from pytest import raises
 
-    return raises(exc)
+    return raises(exc, **kwargs)

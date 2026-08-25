@@ -1,7 +1,7 @@
 """Reporter protocol + rich default implementation.
 
 The library only depends on the ``Reporter`` protocol; the app layer can inject
-its own implementation (e.g. a Textual RichLog bridge).
+its own implementation.
 """
 
 from __future__ import annotations

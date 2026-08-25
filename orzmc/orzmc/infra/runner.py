@@ -1,4 +1,4 @@
-"""Process execution: short-lived commands + long-lived streaming processes.
+"""Process execution: long-lived streaming processes (java client/server).
 
 Replaces the scattered ``os.system`` / ``os.popen`` calls from the old codebase.
 """
@@ -8,39 +8,8 @@ from __future__ import annotations
 import os
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
 
 from orzmc.infra.log import NullReporter, Reporter
-
-
-@dataclass(frozen=True)
-class CommandResult:
-    code: int
-    stdout: str
-    stderr: str
-
-
-class CommandRunner:
-    """Run short-lived commands and capture their output."""
-
-    def __init__(self, reporter: Reporter | None = None) -> None:
-        self._reporter = reporter or NullReporter()
-
-    def run(self, cmd: list[str] | str, check: bool = False, cwd: str | None = None) -> CommandResult:
-        self._reporter.debug(f"$ {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
-        proc = subprocess.run(
-            cmd,
-            shell=isinstance(cmd, str),
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-        )
-        if check and proc.returncode != 0:
-            raise RuntimeError(f"命令执行失败: {cmd}\n{proc.stderr.strip()}")
-        return CommandResult(proc.returncode, proc.stdout, proc.stderr)
-
-    def read(self, cmd: list[str] | str, cwd: str | None = None) -> str:
-        return self.run(cmd, cwd=cwd).stdout
 
 
 class ProcessRunner:
@@ -75,13 +44,37 @@ class ProcessRunner:
                     on_line(line)
         return proc.wait()
 
-    def run_detached(self, args: list[str], cwd: str | None = None) -> int:
-        """Launch a process in the background and return its pid immediately."""
+    def run_detached(
+        self,
+        args: list[str],
+        cwd: str | None = None,
+        log_path: str | None = None,
+    ) -> subprocess.Popen:
+        """Launch a process in the background and return its handle.
+
+        ``stdout``/``stderr`` are redirected to ``log_path`` (appended) when
+        given, otherwise discarded. The caller keeps the handle so it can poll
+        for early exit instead of trusting that a spawned process survives.
+        """
         self._reporter.debug("$ (detached) " + " ".join(args))
         flags = 0
         if os.name == "nt":
             flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        proc = subprocess.Popen(
+        if log_path:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            # Popen dup()s the handle into the child, so the parent's copy can be
+            # closed here while the child keeps writing to the log.
+            with open(log_path, "ab") as out:
+                return subprocess.Popen(
+                    args,
+                    cwd=cwd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=out,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=os.name != "nt",
+                    creationflags=flags,
+                )
+        return subprocess.Popen(
             args,
             cwd=cwd,
             stdin=subprocess.DEVNULL,
@@ -90,4 +83,3 @@ class ProcessRunner:
             start_new_session=os.name != "nt",
             creationflags=flags,
         )
-        return proc.pid

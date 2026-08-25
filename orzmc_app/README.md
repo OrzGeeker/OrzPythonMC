@@ -1,8 +1,8 @@
 # orzmc-app
 
-OrzMC application: Textual TUI + typer CLI built on the `orzmc` library.
+OrzMC application: typer CLI built on the `orzmc` library.
 
-- `orzmc` (no args) opens the TUI
+- `orzmc` (no args) prints help
 - `orzmc client` / `orzmc server` bootstrap game instances
 - `orzmc remove` / `orzmc list` manage installed versions
 

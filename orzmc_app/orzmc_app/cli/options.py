@@ -17,10 +17,6 @@ def _version_help() -> str:
     return "Minecraft 版本(缺省:TTY 交互提示,非 TTY 用 Mojang 最新 release)"
 
 
-def _type_help(kinds: str) -> str:
-    return f"类型: {kinds}"
-
-
 # ── option type aliases ──────────────────────────────────────────────────────
 
 RootDir = Annotated[str | None, typer.Option("--root-dir", help=_root_dir_help())]

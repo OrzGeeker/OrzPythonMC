@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from orzmc.core.mojang import Mojang
@@ -12,7 +13,7 @@ from orzmc.infra.fs import FileStore
 from orzmc.infra.http import HttpClient
 from orzmc.infra.log import NullReporter, Reporter
 from orzmc.infra.progress import NullProgress, ProgressSink
-from orzmc.infra.runner import CommandRunner, ProcessRunner
+from orzmc.infra.runner import ProcessRunner
 from orzmc.services.downloader import Downloader
 from orzmc.services.java import JavaEnv
 
@@ -54,12 +55,21 @@ class Services:
         self.sink = sink or NullProgress()
         self.http = http or HttpClient()
         self.fs = fs or FileStore()
-        self.cmd = CommandRunner(self.reporter)
         self.process = ProcessRunner(self.reporter)
         self.context = AppContext.build(options)
-        self.mojang = Mojang(self.http, self.fs, self.context.paths.version_manifest_path())
-        self.downloader = Downloader(self.http, self.fs, self.reporter, self.sink, self.mojang, self.context.paths)
-        self.java_env = JavaEnv(self.http, self.fs, self.reporter, self.sink, self.context.paths)
+        paths = self.context.paths
+        self.mojang = Mojang(self.http, self.fs, paths.version_manifest_path(), paths.version_jsons_dir())
+        self.downloader = Downloader(self.http, self.fs, self.reporter, self.sink, paths)
+        self.java_env = JavaEnv(self.http, self.fs, self.reporter, self.sink, paths)
+
+    def resolve_java(self, major: int, confirm: Callable[[int, bool], bool] | None = None) -> str:
+        """Java binary for a version JSON's required major — shared by client & server.
+
+        A sandboxed runtime suffices for every supported type: no game type
+        needs a full JDK at run time (install/build steps use ``need_jdk``
+        explicitly only if a provider ever requires it).
+        """
+        return self.java_env.resolve(major, confirm=confirm)
 
     def for_version(self, version: str) -> Services:
         """A copy of the services bound to a concrete Minecraft version."""
