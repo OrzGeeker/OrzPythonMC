@@ -55,7 +55,10 @@ class TestJavaEnv:
     def test_resolve_installs_and_caches(self, tmp_path, reporter, sink, http) -> None:
         # seed a fake JDK archive (Adoptium layout: single top-level dir)
         archive = _make_archive(
-            {"jdk-17.0.1/bin/java": "#!/bin/sh\necho 17\n", "jdk-17.0.1/release": "JAVA_VERSION=17\n"}
+            {
+                f"jdk-17.0.1/bin/{_java_exe()}": "#!/bin/sh\necho 17\n",
+                "jdk-17.0.1/release": "JAVA_VERSION=17\n",
+            }
         )
         http.canned_archive = archive
         fs = FileStore()
@@ -70,7 +73,7 @@ class TestJavaEnv:
         assert http.requests == []
 
     def test_install_uses_jre_by_default(self, tmp_path, reporter, sink, http) -> None:
-        http.canned_archive = _make_archive({"jre-8/bin/java": "java\n"})
+        http.canned_archive = _make_archive({f"jre-8/bin/{_java_exe()}": "java\n"})
         fs = FileStore()
         paths = PathLayout(root=str(tmp_path))
         env = JavaEnv(http, fs, reporter, sink, paths)
@@ -80,7 +83,7 @@ class TestJavaEnv:
     def test_resolve_java_uses_jre_for_every_type(self, tmp_path, reporter, sink, http) -> None:
         # Every supported type runs on a sandboxed JRE — no game type needs a
         # full JDK at run time (fabric/forge install steps use JREs too).
-        http.canned_archive = _make_archive({"jre-21/bin/java": "java\n"})
+        http.canned_archive = _make_archive({f"jre-21/bin/{_java_exe()}": "java\n"})
         for game_type in ("vanilla", "paper", "fabric", "forge"):
             services = _services(tmp_path, reporter, sink, http, game_type=game_type)
             assert services.resolve_java(21) == services.context.paths.java_bin(21)
@@ -532,6 +535,12 @@ def _make_archive(files: dict[str, str]) -> bytes:
                 zf.writestr(path, content)
         return buf.getvalue()
     return _make_tar_gz(files)
+
+
+def _java_exe() -> str:
+    """Platform java executable name — Windows ships java.exe (java_bin adds
+    the suffix), macOS/Linux ship plain java."""
+    return "java.exe" if sys.platform == "win32" else "java"
 
 
 def pytest_raises(exc, **kwargs):

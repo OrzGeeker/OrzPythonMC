@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
@@ -114,7 +115,8 @@ class TestPathLayout:
         assert layout.client_dir() == os.path.join(versions, "1.20.4", "client")
         assert layout.server_dir() == os.path.join(versions, "1.20.4", "server", "vanilla")
         assert layout.java_major_dir(8) == os.path.join("/base", "java", "8")
-        assert layout.java_bin(17) == os.path.join("/base", "java", "17", "bin", "java")
+        java_exe = "java.exe" if sys.platform == "win32" else "java"
+        assert layout.java_bin(17) == os.path.join("/base", "java", "17", "bin", java_exe)
         assert layout.server_jar_path() == os.path.join(versions, "1.20.4", "server", "vanilla", "server.jar")
         assert layout.client_object_path("abcd") == os.path.join(
             versions, "1.20.4", "client", "assets", "objects", "ab", "abcd"
