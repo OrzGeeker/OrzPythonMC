@@ -331,6 +331,15 @@ def temp_dir() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows CI pipes stdout/stderr through the ANSI codepage (cp1252), which
+    # cannot encode our Chinese messages — force UTF-8 (lossy fallback) so a
+    # console codec mismatch never kills the harness before it runs.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     args = build_parser().parse_args(argv)
     if not args.case and not args.backcompat:
         _fail("至少需要一个 --case 或 --backcompat")
@@ -392,6 +401,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  [{mark}] {case.label}: {result}")
         if result.startswith("FAIL") or result == "TIMEOUT":
             failures += 1
+            # Surface the reason in the step output — CI has no console to look
+            # at, so a bare verdict is undiagnosable (see arm64 client exit 1).
+            log = opts.logs / f"{case.role}-{case.game_type}-{case.version}.log"
+            print(f"      └─ 日志尾部:\n{log_tail(log)}")
     if failures:
         print(f"\n失败 {failures}/{len(results)} 个 case(详见上方日志尾部)")
     else:

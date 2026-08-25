@@ -68,6 +68,10 @@ jobs:
           path: ${{ runner.temp }}/orzmc-accept
           key: accept-primary-${{ runner.os }}-${{ runner.arch }}
       - name: Acceptance (latest × all types)
+        env:
+          # Windows runners pipe output through cp1252; UTF-8 avoids the codec
+          # crash in the harness's Chinese messages (harness also reconfigures).
+          PYTHONUTF8: "1"
         run: >-
           uv run --package orzmc-app python scripts/acceptance.py
           --root "${{ runner.temp }}/orzmc-accept"
@@ -79,6 +83,13 @@ jobs:
           --case client:fabric:latest
           --case client:forge:latest
           ${{ inputs.deep-client && '--deep-client' || '' }}
+      - name: Upload acceptance logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-logs-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/orzmc-accept/logs
+          if-no-files-found: warn
 
   # 后向兼容冒烟:旧版本 × vanilla server/client(证明 Mojang manifest/启动管线
   # 仍兼容该大版本)。仅手动 full 套件触发;平台取 x86_64 三平台省 arm64 配额。
@@ -114,8 +125,17 @@ jobs:
           path: ${{ runner.temp }}/orzmc-backcompat
           key: accept-backcompat-${{ runner.os }}-${{ runner.arch }}
       - name: Acceptance (old-version backcompat smoke)
+        env:
+          PYTHONUTF8: "1"
         run: >-
           uv run --package orzmc-app python scripts/acceptance.py
           --root "${{ runner.temp }}/orzmc-backcompat"
           --backcompat "${{ inputs.backcompat_versions }}"
           ${{ inputs.deep-client && '--deep-client' || '' }}
+      - name: Upload acceptance logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-logs-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/orzmc-backcompat/logs
+          if-no-files-found: warn
