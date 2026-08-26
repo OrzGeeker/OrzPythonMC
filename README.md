@@ -32,7 +32,7 @@ orzmc client   [-v VER] [-u USER] [-t vanilla|fabric|forge] [-m MIN] [-x MAX]
                [--extract-music] [--jvm-opts ...]
 orzmc server   [-v VER] [-t vanilla|paper|fabric|forge] [-m MIN] [-x MAX]
                [--force-upgrade] [--symlink] [--force-download] [--yes]
-               [--jvm-opts ...] [--server-args ...]
+               [--jvm-opts ...] [--server-args ...] [--nogui]
 orzmc remove   -v VER [--server -t TYPE] [--yes]
 orzmc list
 orzmc backup   [-v VER] [-t TYPE]
@@ -41,6 +41,7 @@ orzmc version
 
 - **版本缺省**:交互(TTY)时弹全屏键盘导航选择器——默认光标落在最新正式版(直接 Enter 即选中),`↑/↓` 选择版本、`←/→`(及 `PgUp/PgDn`)前后翻页、`Home/End` 跳首尾,滚动整个通道的版本列表(默认视口最近 10 个);`←/→` 翻页仅在搜索框为空时生效,有查询时左右键用于移动光标改错字。输入即按子串过滤**当前列表**(正式版或测试版,命中片段高亮;想搜测试版/远古版本需先 `t` 切过去),`t` 切换正式版/测试版列表,`x` 清空过滤,Esc 退出用最新。选择器**响应式适配终端尺寸**:选中行反显高亮(无指针)、超视口时显示「↑/↓ 还有 N 个」滚动指示、底部帮助拆成多行短句说明每个按键的作用,按列宽放得下几条就显示几条、按行高保列表至少 3 行,窄窗自动隐藏帮助并缩窄视口(窗口运行中调整大小也会实时跟随)。脚本/管道等非 TTY 场景自动使用 Mojang 最新 release。
 - **运行即安装**:`client` / `server` 检测到文件缺失会自动下载安装,无需独立 `install` 子命令。
+- **服务端关闭**:运行中直接在终端输入 `stop` 保存退出;或按 **Ctrl-C**(CLI 会等待服务端保存退出,超过 60s 未退出才强制结束,不会遗留孤儿进程)。`--nogui` 以无窗口模式启动,控制台输入同样有效。
 - **`remove`** 默认移除客户端;`--server -t TYPE` 移除指定类型的服务端;`--yes` 跳过确认。
 - **类型**:客户端支持 `vanilla|fabric|forge`;服务端支持 `vanilla|paper|fabric|forge`(客户端 `-t paper` 会被拒绝,spigot 已并入 Paper)。
 - **Java**:版本要求来自版本 JSON 的 `javaVersion.majorVersion`(缺省 8);自动下载 Temurin JRE 装到 `java/<大版本>/`(所有类型运行时均无需完整 JDK)。

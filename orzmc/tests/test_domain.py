@@ -55,6 +55,7 @@ class TestRuntimeOptions:
         assert opts.game_type == "vanilla"
         assert opts.min_mem == "512M"
         assert opts.max_mem == "2G"
+        assert not opts.nogui
         assert opts.game_type_obj == GameType.VANILLA
 
     def test_frozen(self) -> None:

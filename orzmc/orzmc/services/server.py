@@ -130,8 +130,10 @@ class ServerService:
     def _build_server_command(self, java_bin: str) -> list[str]:
         cmd = [java_bin, *user_jvm_opts(self._options), *memory_args(self._options)]
         cmd += ["-jar", self._paths.server_jar_path()]
-        if self._options.server_args:
-            cmd += shlex.split(self._options.server_args)
+        user_args = shlex.split(self._options.server_args) if self._options.server_args else []
+        if self._options.nogui and "nogui" not in user_args:
+            cmd.append("nogui")
+        cmd += user_args
         if self._options.force_upgrade and "--forceUpgrade" not in cmd:
             cmd.append("--forceUpgrade")
         return cmd

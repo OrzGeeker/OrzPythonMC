@@ -26,6 +26,7 @@ class RuntimeOptions:
     symlink: bool = False
     jvm_opts: str | None = None
     server_args: str | None = None
+    nogui: bool = False
     yes: bool = False
     root_dir: str | None = None
 

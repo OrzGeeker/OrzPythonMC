@@ -122,9 +122,10 @@ def server(
     force_download: Annotated[bool, typer.Option("--force-download", help="强制重新下载核心")] = False,
     yes: Yes = False,
     jvm_opts: JvmOpts = None,
-    server_args: Annotated[
-        str | None, typer.Option("--server-args", help="服务端程序参数(如 'nogui --port 25565')")
-    ] = None,
+    server_args: Annotated[str | None, typer.Option("--server-args", help="服务端程序参数(如 '--port 25565')")] = None,
+    nogui: Annotated[
+        bool, typer.Option("--nogui", help="无窗口模式启动(不弹服务端 GUI);终端输入 stop 或 Ctrl-C 关闭")
+    ] = False,
     root_dir: RootDir = None,
 ) -> None:
     """部署并运行 Minecraft 服务端(缺失文件自动下载即安装)。"""
@@ -144,6 +145,7 @@ def server(
         yes=yes,
         jvm_opts=jvm_opts,
         server_args=server_args,
+        nogui=nogui,
         root_dir=root_dir,
     )
     reporter = RichReporter(verbose=bool(ctx.obj.get("verbose")))

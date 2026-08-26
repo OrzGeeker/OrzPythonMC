@@ -7,9 +7,17 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 from collections.abc import Callable
 
 from orzmc.infra.log import NullReporter, Reporter
+
+# Grace periods for reaping a server that received Ctrl-C (same foreground
+# process group, so it got SIGINT and is already saving & exiting on its own).
+# The wait must cover a world save; the SIGTERM→SIGKILL ladder only fires when
+# the child refuses to exit.
+_INTERRUPT_WAIT = 60.0  # seconds to wait for a graceful exit after Ctrl-C
+_INTERRUPT_KILL = 10.0  # seconds to wait after SIGTERM before SIGKILL
 
 
 class ProcessRunner:
@@ -38,10 +46,18 @@ class ProcessRunner:
             cwd=cwd,
         )
         if proc.stdout is not None:
-            for line in proc.stdout:
-                line = line.rstrip("\n")
-                if on_line:
-                    on_line(line)
+            try:
+                for line in proc.stdout:
+                    line = line.rstrip("\n")
+                    if on_line:
+                        on_line(line)
+            except KeyboardInterrupt:
+                # The terminal delivered Ctrl-C to the whole foreground group,
+                # so the child got SIGINT too and is saving & exiting on its
+                # own. Wait for it so the CLI doesn't orphan the server
+                # mid-shutdown, then re-raise so the caller reports the cancel.
+                _shutdown_after_interrupt(proc, self._reporter, on_line)
+                raise
         return proc.wait()
 
     def run_detached(
@@ -83,3 +99,44 @@ class ProcessRunner:
             start_new_session=os.name != "nt",
             creationflags=flags,
         )
+
+
+def _shutdown_after_interrupt(
+    proc: subprocess.Popen,
+    reporter: Reporter,
+    on_line: Callable[[str], None] | None = None,
+) -> None:
+    """Reap a child that already received Ctrl-C (same foreground group).
+
+    The child handles SIGINT itself (Minecraft servers save the world and
+    exit); this just waits so the CLI returns only once the server is down,
+    instead of orphaning it. The stdout pipe is drained on a daemon thread —
+    forwarding the child's shutdown output through ``on_line`` — so a verbose
+    shutdown can't deadlock on a full pipe. If the child refuses to exit within
+    :data:`_INTERRUPT_WAIT`, escalate SIGTERM (JVM runs its shutdown hooks)
+    then SIGKILL as a last resort.
+    """
+    reporter.info("已收到 Ctrl-C,正在等待服务端保存并退出…")
+    stdout = proc.stdout
+    if stdout is not None:
+
+        def _drain() -> None:
+            for line in stdout:
+                if on_line:
+                    on_line(line.rstrip("\n"))
+
+        # Daemon: dies with the process; blocks until the child exits and
+        # closes the pipe, so proc.wait() below can't deadlock.
+        threading.Thread(target=_drain, daemon=True).start()
+    try:
+        proc.wait(timeout=_INTERRUPT_WAIT)
+        return
+    except subprocess.TimeoutExpired:
+        reporter.warn(f"超过 {_INTERRUPT_WAIT:.0f}s 仍未退出,发送终止信号…")
+    proc.terminate()
+    try:
+        proc.wait(timeout=_INTERRUPT_KILL)
+    except subprocess.TimeoutExpired:
+        reporter.warn("终止信号无效,强制结束进程。")
+        proc.kill()
+        proc.wait()

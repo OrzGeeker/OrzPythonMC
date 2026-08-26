@@ -253,6 +253,23 @@ class TestServerService:
         assert "nogui" in cmd and "--port" in cmd and "25565" in cmd
         assert cmd[-1] == "--forceUpgrade"
 
+    def test_build_server_command_nogui_flag(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http, nogui=True, server_args="--port 25565")
+        cmd = ServerService(services)._build_server_command("/managed/java")
+        assert cmd.index("nogui") > cmd.index("-jar")
+        assert cmd.index("nogui") < cmd.index("--port")
+        assert cmd.count("nogui") == 1
+
+    def test_build_server_command_nogui_not_duplicated(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http, nogui=True, server_args="nogui --port 25565")
+        cmd = ServerService(services)._build_server_command("/managed/java")
+        assert cmd.count("nogui") == 1
+
+    def test_build_server_command_nogui_default_absent(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http, server_args="--port 25565")
+        cmd = ServerService(services)._build_server_command("/managed/java")
+        assert "nogui" not in cmd
+
     def test_accept_eula_via_yes(self, tmp_path, reporter, sink, http) -> None:
         services = _services(tmp_path, reporter, sink, http, yes=True)
         server = ServerService(services)
