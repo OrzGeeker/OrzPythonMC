@@ -123,6 +123,8 @@ uv lock                            # 锁定依赖
 
 ## 发布
 
-- 双通道:**GitHub Release**(各平台 PyInstaller 二进制,见 `release.yml`)+ **PyPI**(`orzmc` 与 `orzmc-app` 双包,`uv publish`)。
+- 双通道:**GitHub Release**(各平台 PyInstaller 二进制,见 `release.yml`)+ **PyPI**(`orzmc` 与 `orzmc-app` 双包)。
+- PyPI 用**按包 scope 的 API token**(repo secret:`PYPI_API_TOKEN_ORZMC_LIB`→`orzmc`、`PYPI_API_TOKEN_ORZMC_APP`→`orzmc_app`);`release.yml` 的 `pypi` job 拆两步各自 `uv publish dist/<包>-*`(glob `orzmc-*` 不误匹配 `orzmc_app-*`,下划线分隔)。
 - 版本号唯一源:`orzmc/version.py` 的 `__version__`。发版前提升它,并同步 `orzmc_app/pyproject.toml` 的 `version`。
+- **新包首版坑**:PyPI 禁止非用户身份(如 GitHub Actions 机器人)创建不存在的项目;`orzmc_app` 在 2.0.0 首次发布时不存在,须先由真实账号用 API token 手动上传一次创建项目,机器人之后才能自动发布后续版本。
 - CI 只做质量门禁与发布,**不**负责版本号管理。
