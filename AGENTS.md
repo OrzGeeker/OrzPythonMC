@@ -12,6 +12,8 @@ OrzMC 是一个跨平台 Minecraft **客户端启动 / 服务端部署** CLI 工
 
 用户最终体验:无参 `orzmc` 打印帮助;`orzmc client/server` 等直接命令行使用;版本缺失自动安装;Java 运行时沙盒托管在应用目录下,不依赖系统 java。
 
+**许可证为 Apache-2.0**(唯一权威:根 `LICENSE` 文件)。两个包 pyproject 的 `license` 字段与官网文案必须与此一致——2026-08 曾因 pyproject/官网误写 MIT 与根 LICENSE(Apache-2.0)不一致而统一修正过,勿再改回。
+
 ## 技术选型
 
 | 项 | 选择 | 说明 |
