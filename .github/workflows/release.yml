@@ -50,7 +50,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-packages
       - name: Build binary
-        run: uv run --package orzmc-app python scripts/build.py
+        # --name 让每个平台产出独立文件名(orzmc-<os>-<arch>),Release 上不再互相覆盖
+        run: uv run --package orzmc-app python scripts/build.py --name ${{ matrix.artifact }}
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

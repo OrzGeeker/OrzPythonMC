@@ -1,10 +1,15 @@
 """Build the orzmc-app into a single-file PyInstaller binary → dist/.
 
 Run from the workspace root: `uv run --package orzmc-app python scripts/build.py`
+
+``--name`` gives the binary a per-platform base name so a multi-platform
+release attaches distinct assets (``orzmc-linux-x86_64`` etc.) instead of
+every platform overwriting the same ``orzmc`` file on the Release.
 """
 
 from __future__ import annotations
 
+import argparse
 import shutil
 import subprocess
 import sys
@@ -14,6 +19,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Build the orzmc-app single-file binary into dist/.")
+    parser.add_argument("--name", default="orzmc", help="Binary base name (e.g. orzmc-linux-arm64); default: orzmc")
+    args = parser.parse_args()
+    name = args.name
+
     dist = ROOT / "dist"
     build_dir = ROOT / ".pybuild"
     for d in (dist, build_dir):
@@ -33,7 +43,7 @@ def main() -> int:
         "PyInstaller",
         "--onefile",
         "--name",
-        "orzmc",
+        name,
         "--distpath",
         str(dist),
         "--workpath",
@@ -49,7 +59,7 @@ def main() -> int:
         print("PyInstaller build failed", file=sys.stderr)
         return result.returncode
 
-    binary = dist / ("orzmc.exe" if sys.platform == "win32" else "orzmc")
+    binary = dist / (name + (".exe" if sys.platform == "win32" else ""))
     print(f"Binary: {binary}")
     return 0
 
