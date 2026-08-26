@@ -44,7 +44,8 @@ orzmc/services → orzmc/core → orzmc/domain + orzmc/infra
 ```
 python/                         # uv workspace 根
   pyproject.toml  uv.lock  AGENTS.md  README.md
-  .github/workflows/{ci,acceptance,release}.yml  scripts/{build,acceptance}.py
+  .github/workflows/{ci,acceptance,release,pages}.yml  scripts/{build,acceptance}.py
+  docs/index.html                # 官网(静态单页,GitHub Pages 托管)
   orzmc/                        # 库包(name="orzmc",py.typed)
     pyproject.toml
     orzmc/  version.py  __init__.py
@@ -120,6 +121,7 @@ uv lock                            # 锁定依赖
   - **判定语义**:`PASS`(server 日志 `Done (` / client 退出码 0 引导级);`UP(no Done)`(端口开 90s 无 Done = Mojang MC-263542 世界生成卡死,记警告不判失败);`SKIP`(日志含"不支持 Minecraft"/"未找到 Minecraft",类型暂未适配该版本,如 Forge 滞后);`UP(gap)`(上游无该平台产物:Adoptium 对某 OS/arch/major 的 Temurin 返回 404,或 Mojang 无该 arch 的 lwjgl natives —— 记警告不判失败,上游补齐后自动恢复真实判定);`FAIL`/`TIMEOUT` 判失败。客户端引导级判定依赖 Linux `xvfb-run`,headless 需装 xvfb;`--deep-client` 仅真机手动用(CI 的 macOS/Windows 无 GL 上下文会假阴性)。
   - 游戏 root 按 `runner.os`-`runner.arch` 缓存(Java + assets + jars),夜间只取增量。
 - **`release.yml`(打 `v*` 标签)**:`quality` 复用 `ci.yml` 传 `skip-test-matrix: true`(6 平台 pytest 已在 main 跑过);`binary` 6 组合构建挂 GitHub Release;`pypi` 双包发布。
+- **`pages.yml`(push main 且 `docs/**` 或工作流自身变更 + workflow_dispatch)**:静态官网(自包含单页 `docs/index.html`,无外部构建)用 `actions/configure`/`upload-pages-artifact`/`deploy-pages` 部署到 GitHub Pages,站点地址 <https://orzmc.github.io/OrzPythonMC/>;`permissions: pages: write + id-token: write`,`concurrency: group=pages` 防止并发部署互相踩。页面内下载小组件直接调 `api.github.com/repos/OrzMC/OrzPythonMC/releases/latest` 拉取最新发布,自动按平台给出下载链接 —— 改动 `docs/` 推送即自动更新。
 
 ## 发布
 
