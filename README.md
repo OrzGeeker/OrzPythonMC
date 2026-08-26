@@ -2,6 +2,8 @@
 
 [![站点](https://img.shields.io/badge/站点-OrzMC%20官网-15803d)](https://orzmc.github.io/OrzPythonMC/)
 
+> 🏠 **项目主页**:<https://orzmc.github.io/OrzPythonMC/> — 一键安装指引、各平台独立二进制下载(自动识别平台)、功能与特性介绍。改动 `docs/` 推送即自动更新。
+
 跨平台 Minecraft 客户端启动 / 服务端部署工具。Python 编写,提供**命令行直用**(交互式 rich 提示),支持**多版本客户端/服务端并存**,Java 运行时**自动下载并收敛到应用目录**(不依赖系统 Java),发布为 **PyPI 包** 与 **各平台独立二进制**。
 
 ## 安装
