@@ -21,7 +21,7 @@ orzmc --help
 
 ```bash
 orzmc --help     # 帮助(无子命令时同样打印帮助)
-orzmc client -v 1.20.4 -u player  # 命令行直用
+orzmc client -v 26.2 -u player     # 命令行直用(-v 缺省时用 Mojang 最新 release)
 ```
 
 交互式运行(有 TTY)时,缺省版本弹键盘导航选择器(默认光标在最新,`↑↓` 选择版本、`←→` 前后翻页(翻页键/首尾键同样可用),输入在当前列表中即时过滤,`t` 切换正式版/测试版、`x` 清空过滤,Enter 选中、Esc 用最新);选择器按终端尺寸响应式布局——选中行反显高亮、列表上下沿有「还有 N 个」滚动指示、搜索命中片段高亮、底部帮助拆成多行短句说明每个按键的作用(按列宽/行高自动增减,窄窗隐藏)。Java/EULA/移除等操作会逐行确认;脚本/管道等非 TTY 场景自动用 Mojang 最新 release 与默认值,不阻塞。
@@ -51,13 +51,13 @@ orzmc version
 ## 常用示例
 
 ```bash
-orzmc client -v 1.20.4 -u Steve          # 启动 1.20.4 原版客户端(自动补齐文件)
-orzmc client -v 1.20.4 -t fabric         # 以 Fabric 客户端启动(自动装 loader)
-orzmc client -v 1.20.4 -t forge          # 以 Forge 客户端启动(官方安装器收割)
-orzmc server -v 1.20.4 -t paper --yes    # 部署并启动 Paper 服务端(自动接受 EULA)
-orzmc server -v 1.20.4 -t fabric --yes   # 部署并启动 Fabric 服务端
-orzmc list                                # 查看已安装版本(客户端/服务端类型)
-orzmc remove -v 1.20.4 --yes              # 移除 1.20.4 客户端
+orzmc client -v 26.2 -u Steve          # 启动最新版(26.2)原版客户端(自动补齐文件)
+orzmc client -v 26.2 -t fabric         # 以 Fabric 客户端启动(自动装 loader)
+orzmc client -v 26.2 -t forge          # 以 Forge 客户端启动(官方安装器收割)
+orzmc server -v 26.2 -t paper --yes    # 部署并启动 Paper 服务端(自动接受 EULA)
+orzmc server -v 26.2 -t fabric --yes   # 部署并启动 Fabric 服务端
+orzmc list                              # 查看已安装版本(客户端/服务端类型)
+orzmc remove -v 26.2 --yes              # 移除最新版客户端
 ```
 
 ## 目录结构(统一,多版本并存)
@@ -108,7 +108,7 @@ uv run --package orzmc-app python scripts/acceptance.py \
 
 ## 兼容性说明(v1 → v2)
 
-- 旧顶层 `orzmc -s -v 1.20.4` 改为 `orzmc server -v 1.20.4`;客户端/服务端统一 `-v/-t/-m/-x`。
+- 旧顶层 `orzmc -s -v 26.2` 改为 `orzmc server -v 26.2`;客户端/服务端统一 `-v/-t/-m/-x`。
 - 旧 `-E "a:..."` 改为 `--jvm-opts "..."` 与 `--server-args "..."`。
 - 目录结构改为统一布局;`orzmc list` 可查看已装版本与类型,便于迁移。
 - 移除 nginx/rsync/daemon/skin system/BMCLAPI 镜像等系统级能力;直连官方源。
