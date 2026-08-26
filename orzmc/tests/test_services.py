@@ -163,6 +163,49 @@ class TestMojangMeta:
         assert services.mojang.version_json("26.2")["javaVersion"]["majorVersion"] == 25
         assert services.fs.read_text(cache) == body.decode()
 
+    def test_version_entries_include_all_types_in_manifest_order(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http)
+        services.fs.write_json(
+            services.context.paths.version_manifest_path(),
+            {
+                "versions": [
+                    {"id": "26.2", "type": "release"},
+                    {"id": "25w14a", "type": "snapshot"},
+                    {"id": "b1.7.3", "type": "old_beta"},
+                ]
+            },
+        )
+        entries = services.mojang.version_entries()
+        assert [(e.id, e.type, e.channel) for e in entries] == [
+            ("26.2", "release", "release"),
+            ("25w14a", "snapshot", "snapshot"),
+            ("b1.7.3", "old_beta", "snapshot"),
+        ]
+
+    def test_version_entries_missing_type_defaults_to_unknown(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http)
+        services.fs.write_json(
+            services.context.paths.version_manifest_path(),
+            {"versions": [{"id": "x", "url": "https://meta/x.json"}]},
+        )
+        entry = services.mojang.version_entries()[0]
+        assert (entry.id, entry.type, entry.is_release) == ("x", "unknown", False)
+
+    def test_release_version_ids_delegates_to_entries(self, tmp_path, reporter, sink, http) -> None:
+        services = _services(tmp_path, reporter, sink, http)
+        services.fs.write_json(
+            services.context.paths.version_manifest_path(),
+            {
+                "versions": [
+                    {"id": "1.21.4", "type": "release"},
+                    {"id": "1.21.3", "type": "release"},
+                    {"id": "1.21.2", "type": "snapshot"},
+                    {"id": "1.20.4", "type": "release"},
+                ]
+            },
+        )
+        assert services.mojang.release_version_ids() == ["1.21.4", "1.21.3", "1.20.4"]
+
 
 class TestDownloader:
     def test_prepare_client(self, tmp_path, reporter, sink, http) -> None:

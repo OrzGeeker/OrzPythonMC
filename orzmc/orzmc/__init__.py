@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from orzmc.core.mojang import VersionEntry
 from orzmc.domain.java import DEFAULT_JAVA_MAJOR, required_java_major
 from orzmc.domain.launch import DEFAULT_MAIN_CLASS, build_launch_command, game_args, jvm_args
 from orzmc.domain.libraries import Library, resolve_libraries
@@ -49,6 +50,7 @@ __all__ = [
     "ServerService",
     # services
     "Services",
+    "VersionEntry",
     "VersionManager",
     # versions
     "__version__",
@@ -61,6 +63,7 @@ __all__ = [
     # entry points
     "launch_client",
     "list_versions",
+    "remote_version_catalog",
     "remote_versions",
     "remove_version",
     "required_java_major",
@@ -114,10 +117,15 @@ def list_versions(root_dir: str | None = None) -> list[InstalledVersion]:
     return VersionManager(root_dir=root_dir).list_versions()
 
 
+def remote_version_catalog(root_dir: str | None = None, update: bool = False) -> list[VersionEntry]:
+    """List all Mojang manifest versions (any type, newest first); installs nothing."""
+    options = RuntimeOptions(root_dir=root_dir or DEFAULT_ROOT)
+    return Services(options).mojang.version_entries(update=update)
+
+
 def remote_versions(root_dir: str | None = None, update: bool = False) -> list[str]:
     """List Mojang release version ids (fetches/caches the manifest, installs nothing)."""
-    options = RuntimeOptions(root_dir=root_dir or DEFAULT_ROOT)
-    return Services(options).mojang.release_version_ids(update=update)
+    return [e.id for e in remote_version_catalog(root_dir, update) if e.is_release]
 
 
 def remove_version(

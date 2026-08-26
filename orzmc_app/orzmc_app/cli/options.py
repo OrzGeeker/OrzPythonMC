@@ -14,7 +14,7 @@ def _root_dir_help() -> str:
 
 
 def _version_help() -> str:
-    return "Minecraft 版本(缺省:TTY 交互提示,非 TTY 用 Mojang 最新 release)"
+    return "Minecraft 版本(缺省:TTY 交互选择,可搜索/切换正式版·测试版;非 TTY 用 Mojang 最新 release)"
 
 
 # ── option type aliases ──────────────────────────────────────────────────────

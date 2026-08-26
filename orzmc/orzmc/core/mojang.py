@@ -8,6 +8,7 @@ point shared by the client and server launch flows.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from orzmc.infra.fs import FileStore
@@ -16,6 +17,23 @@ from orzmc.infra.http import HttpClient
 
 VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest.json"
 ASSET_BASE_URL = "https://resources.download.minecraft.net/"
+
+
+@dataclass(frozen=True)
+class VersionEntry:
+    """One entry in the Mojang version manifest (a version id + its raw type)."""
+
+    id: str
+    type: str
+
+    @property
+    def is_release(self) -> bool:
+        return self.type == "release"
+
+    @property
+    def channel(self) -> str:
+        """release vs snapshot — snapshots cover every non-release manifest type."""
+        return "release" if self.is_release else "snapshot"
 
 
 class Mojang:
@@ -36,9 +54,13 @@ class Mojang:
         self._fs.write_json(self._manifest_path, data)
         return data
 
-    def release_version_ids(self, update: bool = False) -> list[str]:
+    def version_entries(self, update: bool = False) -> list[VersionEntry]:
+        """All manifest entries (any type), preserving Mojang's newest-first order."""
         manifest = self.load_manifest(update)
-        return [v["id"] for v in manifest.get("versions", []) if v.get("type") == "release"]
+        return [VersionEntry(id=v["id"], type=v.get("type") or "unknown") for v in manifest.get("versions", [])]
+
+    def release_version_ids(self, update: bool = False) -> list[str]:
+        return [e.id for e in self.version_entries(update) if e.is_release]
 
     def latest_release_id(self) -> str:
         ids = self.release_version_ids()

@@ -5,9 +5,11 @@ from __future__ import annotations
 import sys
 
 from rich.console import Console
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 
-from orzmc import remote_versions
+from orzmc import remote_version_catalog
+
+from .picker import run_picker
 
 _console = Console(highlight=False)
 
@@ -20,8 +22,9 @@ def is_interactive() -> bool:
 def resolve_version(version: str | None, root_dir: str | None) -> str | None:
     """Resolve the Minecraft version for a command.
 
-    Explicit value → used as-is. TTY without value → interactive pick from the
-    recent Mojang releases. Non-TTY without value → ``None``, letting the
+    Explicit value → used as-is. TTY without value → interactive keyboard
+    picker over the full Mojang catalog (scroll, filter, release/snapshot
+    toggle, Escape → latest). Non-TTY without value → ``None``, letting the
     library fall back to the latest release.
     """
     if version:
@@ -29,23 +32,18 @@ def resolve_version(version: str | None, root_dir: str | None) -> str | None:
     if not is_interactive():
         return None
     try:
-        releases = remote_versions(root_dir=root_dir)
+        catalog = remote_version_catalog(root_dir=root_dir)
     except Exception as exc:
         _console.print(f"[yellow]无法获取版本列表({exc}),回车使用最新[/yellow]")
         return None
-    if not releases:
+    if not catalog:
+        _console.print("[yellow]版本清单为空,回车使用最新[/yellow]")
         return None
-    recent = releases[:15]
-    _console.print("[info]最近的 Mojang release:[/info]")
-    for i, item in enumerate(recent[:10], 1):
-        _console.print(f"  [muted]{i:>2}.[/muted] {item}")
-    picked = Prompt.ask("选择版本(输入序号/版本号,回车用最新)", default="")
-    picked = picked.strip()
-    if not picked:
+    try:
+        return run_picker(catalog)
+    except Exception as exc:  # never crash the CLI on TUI trouble
+        _console.print(f"[yellow]版本选择器异常({exc}),回车使用最新[/yellow]")
         return None
-    if picked.isdigit() and 1 <= int(picked) <= len(recent):
-        return recent[int(picked) - 1]
-    return picked
 
 
 def confirm_java(major: int, need_jdk: bool) -> bool:
