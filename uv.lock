@@ -569,7 +569,7 @@ requires-dist = [
 
 [[package]]
 name = "orzmc-app"
-version = "2.0.0"
+version = "2.0.1"
 source = { editable = "orzmc_app" }
 dependencies = [
     { name = "orzmc" },
