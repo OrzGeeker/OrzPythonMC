@@ -6,7 +6,7 @@ import sys
 from typing import Any
 
 from rich.console import Console
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 
 _console = Console(highlight=False)
 
@@ -72,6 +72,19 @@ def resolve_version(version: str | None, root_dir: str | None) -> str | None:
     except Exception as exc:  # never crash the CLI on TUI trouble
         _console.print(f"[yellow]版本选择器异常({exc}),回车使用最新[/yellow]")
         return None
+
+
+def resolve_username(username: str | None) -> str:
+    """Resolve the client player name: explicit flag / TTY ask / default guest.
+
+    Explicit ``--username`` → as-is. TTY without a value → ask once (Enter
+    keeps the default ``guest``). Non-TTY → ``guest`` so scripts stay silent.
+    """
+    if username:
+        return username
+    if not is_interactive():
+        return "guest"
+    return Prompt.ask("玩家名称(回车使用默认 guest)", default="guest").strip() or "guest"
 
 
 def confirm_java(major: int, need_jdk: bool) -> bool:

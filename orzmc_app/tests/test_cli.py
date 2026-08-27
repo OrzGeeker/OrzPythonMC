@@ -75,6 +75,61 @@ def test_client_accepts_forge_type(monkeypatch) -> None:
     assert calls == ["launch"]
 
 
+def test_client_passes_explicit_username(monkeypatch) -> None:
+    usernames: list[str] = []
+
+    def fake_resolve(version, root_dir=None):
+        return version or "1.20.4"
+
+    def fake_launch(options, **kwargs) -> None:
+        usernames.append(options.username)
+
+    monkeypatch.setattr(app_module, "resolve_version", fake_resolve)
+    monkeypatch.setattr(app_module, "launch_client", fake_launch)
+    result = runner.invoke(app, ["client", "--version", "1.20.4", "-u", "Steve"])
+    assert result.exit_code == 0, result.stdout
+    assert usernames == ["Steve"]
+
+
+def test_client_defaults_username_to_guest_when_not_tty(monkeypatch) -> None:
+    """CliRunner 非 TTY → 真实 resolve_username 静默用默认 guest,不弹询问。"""
+    usernames: list[str] = []
+
+    def fake_resolve(version, root_dir=None):
+        return version or "1.20.4"
+
+    def fake_launch(options, **kwargs) -> None:
+        usernames.append(options.username)
+
+    monkeypatch.setattr(app_module, "resolve_version", fake_resolve)
+    monkeypatch.setattr(app_module, "launch_client", fake_launch)
+    result = runner.invoke(app, ["client", "--version", "1.20.4"])
+    assert result.exit_code == 0, result.stdout
+    assert usernames == ["guest"]
+
+
+def test_client_calls_resolve_username(monkeypatch) -> None:
+    """未指定 -u → resolve_username(None) 被调用,返回值透传进 launch_client。"""
+    calls: list[object] = []
+
+    def fake_resolve(version, root_dir=None):
+        return version or "1.20.4"
+
+    def fake_username(username):
+        calls.append(username)
+        return "Alice"
+
+    def fake_launch(options, **kwargs) -> None:
+        pass
+
+    monkeypatch.setattr(app_module, "resolve_version", fake_resolve)
+    monkeypatch.setattr(app_module, "resolve_username", fake_username)
+    monkeypatch.setattr(app_module, "launch_client", fake_launch)
+    result = runner.invoke(app, ["client", "--version", "1.20.4"])
+    assert result.exit_code == 0, result.stdout
+    assert calls == [None]
+
+
 def test_server_accepts_fabric_and_forge(monkeypatch) -> None:
     types_seen: list[str] = []
 

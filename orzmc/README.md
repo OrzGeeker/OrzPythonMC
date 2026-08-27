@@ -7,7 +7,7 @@ published to PyPI.
 ```python
 from orzmc import GameType, RuntimeOptions, launch_client
 
-opts = RuntimeOptions(is_client=True, version="1.20.4", game_type="vanilla")
+opts = RuntimeOptions(is_client=True, version="26.2", game_type="vanilla")
 launch_client(opts)
 ```
 

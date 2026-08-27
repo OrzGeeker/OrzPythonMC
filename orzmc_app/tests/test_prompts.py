@@ -5,7 +5,7 @@ from __future__ import annotations
 from orzmc import VersionEntry
 from orzmc_app.cli import picker as picker_module
 from orzmc_app.cli import prompts as prompts_module
-from orzmc_app.cli.prompts import resolve_version
+from orzmc_app.cli.prompts import resolve_username, resolve_version
 
 CATALOG = [
     VersionEntry("1.21.4", "release"),
@@ -77,3 +77,45 @@ class TestResolveVersion:
         monkeypatch.setattr(prompts_module, "is_interactive", lambda: True)
         monkeypatch.setattr(prompts_module, "remote_version_catalog", lambda root_dir=None: [])
         assert resolve_version(None, None) is None
+
+
+class TestResolveUsername:
+    """resolve_username: explicit flag / TTY ask / non-TTY default, no TTY needed."""
+
+    def test_explicit_value_passthrough(self) -> None:
+        assert resolve_username("Alice") == "Alice"
+
+    def test_non_interactive_returns_guest(self, monkeypatch) -> None:
+        monkeypatch.setattr(prompts_module, "is_interactive", lambda: False)
+        monkeypatch.setattr(prompts_module, "Prompt", object())  # 若误调 ask → AttributeError
+        assert resolve_username(None) == "guest"
+
+    def test_tty_asks_and_returns_answer(self, monkeypatch) -> None:
+        class _Prompt:
+            @staticmethod
+            def ask(prompt, default=None) -> str:
+                return "Alice"
+
+        monkeypatch.setattr(prompts_module, "is_interactive", lambda: True)
+        monkeypatch.setattr(prompts_module, "Prompt", _Prompt)
+        assert resolve_username(None) == "Alice"
+
+    def test_tty_empty_input_returns_guest(self, monkeypatch) -> None:
+        class _Prompt:
+            @staticmethod
+            def ask(prompt, default=None) -> str:
+                return ""
+
+        monkeypatch.setattr(prompts_module, "is_interactive", lambda: True)
+        monkeypatch.setattr(prompts_module, "Prompt", _Prompt)
+        assert resolve_username(None) == "guest"
+
+    def test_tty_whitespace_stripped(self, monkeypatch) -> None:
+        class _Prompt:
+            @staticmethod
+            def ask(prompt, default=None) -> str:
+                return "  Bob  "
+
+        monkeypatch.setattr(prompts_module, "is_interactive", lambda: True)
+        monkeypatch.setattr(prompts_module, "Prompt", _Prompt)
+        assert resolve_username(None) == "Bob"

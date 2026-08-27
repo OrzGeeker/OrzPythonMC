@@ -34,7 +34,7 @@ from orzmc.infra.log import RichReporter
 from orzmc.infra.progress import RichProgress
 from orzmc_app import __version__ as APP_VERSION
 from orzmc_app.cli.options import JvmOpts, MaxMem, MinMem, RootDir, Username, Verbose, Version, Yes
-from orzmc_app.cli.prompts import confirm_eula, confirm_java, is_interactive, resolve_version
+from orzmc_app.cli.prompts import confirm_eula, confirm_java, is_interactive, resolve_username, resolve_version
 
 _console = Console(highlight=False)
 app = typer.Typer(add_completion=False, no_args_is_help=False, invoke_without_command=True)
@@ -67,7 +67,7 @@ def _parse_type(value: str, *, client: bool) -> GameType:
 def root(ctx: typer.Context, verbose: Verbose = False) -> None:
     """OrzMC — Minecraft 客户端启动 / 服务端部署工具。
 
-    不带子命令时打印帮助;直接使用子命令(如 ``orzmc client -v 1.20.4``)。
+    不带子命令时打印帮助;直接使用子命令(如 ``orzmc client -v 26.2``)。
     """
     ctx.obj = {"verbose": verbose}
     if ctx.invoked_subcommand is None:
@@ -79,7 +79,7 @@ def root(ctx: typer.Context, verbose: Verbose = False) -> None:
 def client(
     ctx: typer.Context,
     version: Version = None,
-    username: Username = "guest",
+    username: Username = None,
     game_type: Annotated[str, typer.Option("--type", "-t", help="类型: vanilla|fabric|forge")] = "vanilla",
     min_mem: MinMem = "512M",
     max_mem: MaxMem = "2G",
@@ -92,6 +92,7 @@ def client(
     _check_mem("min", min_mem)
     _check_mem("max", max_mem)
     resolved = resolve_version(version, root_dir)
+    username = resolve_username(username)
     options = RuntimeOptions(
         is_client=True,
         version=resolved,

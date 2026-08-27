@@ -301,11 +301,16 @@
       <div class="qs-code"><pre><span class="cm"># 安装(Unix 一条命令;Windows 用 irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex)</span>
 curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh
 
+<span class="cm"># 每个子命令支持 --help 查看参数(如 orzmc client --help 可看到 -u/--username 等)</span>
+orzmc client --help
+
 <span class="cm"># 启动最新版(26.2)原版客户端;-v 缺省时自动用 Mojang 最新 release</span>
+<span class="cm"># -u 自定义玩家名(默认 guest;TTY 未指定时交互询问,回车用默认)</span>
+orzmc client -v 26.2 -u Steve
 orzmc client -v 26.2
 
 <span class="cm"># 以 Fabric 启动客户端</span>
-orzmc client -v 26.2 -t fabric
+orzmc client -v 26.2 -t fabric -u Steve
 
 <span class="cm"># 部署并启动 Paper 服务端(自动接受 EULA,无窗口模式)</span>
 orzmc server -v 26.2 -t paper --yes --nogui</pre></div>

@@ -17,11 +17,15 @@ def _version_help() -> str:
     return "Minecraft 版本(缺省:TTY 交互选择,可搜索/切换正式版·测试版;非 TTY 用 Mojang 最新 release)"
 
 
+def _username_help() -> str:
+    return "游戏用户名(缺省 TTY 交互提示,回车用默认 guest;非 TTY 用默认 guest)"
+
+
 # ── option type aliases ──────────────────────────────────────────────────────
 
 RootDir = Annotated[str | None, typer.Option("--root-dir", help=_root_dir_help())]
 Version = Annotated[str | None, typer.Option("--version", "-v", help=_version_help())]
-Username = Annotated[str, typer.Option("--username", "-u", help="游戏用户名(默认 guest)")]
+Username = Annotated[str | None, typer.Option("--username", "-u", help=_username_help())]
 MinMem = Annotated[str, typer.Option("--minmem", "-m", help="最小内存(如 512M)")]
 MaxMem = Annotated[str, typer.Option("--maxmem", "-x", help="最大内存(如 2G)")]
 JvmOpts = Annotated[str | None, typer.Option("--jvm-opts", help="附加 JVM 旗标(空格分隔,如 '-XX:+UseZGC')")]

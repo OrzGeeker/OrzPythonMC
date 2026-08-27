@@ -60,12 +60,17 @@ orzmc self-uninstall [--yes] [--remove-root] [--force]
 ## 快速开始
 
 ```bash
+# 每个子命令都支持 --help 查看参数(如 orzmc client --help 可看到 -u/--username 等)
+orzmc client --help
+
 # 启动最新版(26.2)原版客户端;-v 缺省时自动用 Mojang 最新 release
+# 玩家名默认 guest;TTY 下未指定会交互询问,回车用默认;也可 -u/--username 显式指定
 orzmc client -v 26.2 -u Steve
+orzmc client -v 26.2            # 交互输入玩家名(回车用默认 guest)
 
 # 以 Fabric / Forge 启动客户端(自动装 loader / 官方安装器收割)
-orzmc client -v 26.2 -t fabric
-orzmc client -v 26.2 -t forge
+orzmc client -v 26.2 -t fabric -u Steve
+orzmc client -v 26.2 -t forge -u Steve
 
 # 部署并启动 Paper / Fabric 服务端(自动接受 EULA)
 orzmc server -v 26.2 -t paper --yes --nogui
@@ -78,9 +83,11 @@ orzmc remove -v 26.2 --yes
 
 ## 命令行
 
+每个子命令都可加 `--help` 查看完整参数(如 `orzmc client --help`)。
+
 ```
 orzmc [--verbose]                 # 无子命令 → 打印帮助
-orzmc client   [-v VER] [-u USER] [-t vanilla|fabric|forge] [-m MIN] [-x MAX]
+orzmc client   [-v VER] [--username|-u USER] [-t vanilla|fabric|forge] [-m MIN] [-x MAX]
                [--extract-music] [--jvm-opts ...]
 orzmc server   [-v VER] [-t vanilla|paper|fabric|forge] [-m MIN] [-x MAX]
                [--force-upgrade] [--symlink] [--force-download] [--yes]
@@ -95,6 +102,7 @@ orzmc version
 要点:
 
 - **版本缺省**:有 TTY 时弹出键盘导航选择器(`↑↓` 选择、`←→` / PgUp / PgDn 翻页、输入即过滤、`t` 切正式 / 测试版、`x` 清空、Enter 选中、Esc 用最新);脚本 / 管道等非 TTY 场景自动用最新 release 与默认值,不阻塞。
+- **玩家名**:`client` 默认 `guest`;TTY 下未指定 `-u/--username` 会交互询问(回车用默认);脚本 / 管道等非 TTY 场景静默用默认。
 - **运行即安装**:`client` / `server` 检测到文件缺失会自动下载补齐。
 - **服务端关闭**:终端输入 `stop` 保存退出,或按 **Ctrl-C**(等待保存退出,超 60s 才强制结束,不留孤儿进程)。
 - **类型**:客户端 `vanilla|fabric|forge`;服务端 `vanilla|paper|fabric|forge`。
