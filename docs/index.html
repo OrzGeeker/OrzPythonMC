@@ -126,48 +126,78 @@
   .sec-head h2 { font-size: 30px; letter-spacing: -.02em; margin: 0 0 10px; }
   .sec-head p { color: var(--muted); margin: 0; max-width: 40em; }
 
-  /* ── install ── */
-  .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  @media (max-width: 820px) { .install-grid { grid-template-columns: 1fr; } }
-  .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 28px;
+  /* ── install / uninstall:命令面板 + 紧凑表 ── */
+  .cmd-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
   }
-  .card h3 { margin: 0 0 6px; font-size: 18px; }
-  .card .card-sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
-  .cmdbox {
+  .cmd-row { display: flex; align-items: center; gap: 16px; padding: 14px 20px; }
+  .cmd-row + .cmd-row { border-top: 1px solid var(--border); }
+  .cmd-tag {
+    flex-shrink: 0; width: 172px;
+    font-size: 13px; font-weight: 600; color: var(--muted);
+  }
+  code.cmd-line {
+    flex: 1; min-width: 0; margin: 0;
     background: var(--code-bg); color: var(--code-ink);
-    border-radius: 10px; padding: 14px 16px;
+    border: none; border-radius: 9px; padding: 12px 48px 12px 16px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 14px; overflow-x: auto; white-space: pre;
-    position: relative; margin-bottom: 12px;
+    font-size: 14px; line-height: 1.5;
+    white-space: nowrap; overflow-x: auto;
+    position: relative;
   }
-  .cmdbox .copy {
-    position: absolute; top: 10px; right: 10px;
+  .cmd-line .copy {
+    position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
     background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
     color: var(--code-ink); font-size: 12px; padding: 4px 10px; border-radius: 7px;
     cursor: pointer;
   }
-  .cmdbox .copy:hover { background: rgba(255,255,255,.16); }
-  .card .note { font-size: 13px; color: var(--muted); }
-  .card .note code { background: var(--surface-2); }
+  .cmd-line .copy:hover { background: rgba(255,255,255,.16); }
+  @media (max-width: 640px) {
+    .cmd-row { flex-direction: column; align-items: stretch; gap: 8px; }
+    .cmd-tag { width: auto; }
+  }
+  .panel-note { margin: 10px 2px 0; font-size: 13px; color: var(--muted); }
+  .panel-note code { background: var(--surface-2); }
 
+  .sub-head {
+    margin: 44px 0 12px; font-size: 13px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  }
+  .opt-list { border-top: 1px solid var(--border); }
+  .opt-row {
+    display: flex; align-items: baseline; gap: 20px;
+    padding: 14px 4px; border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .opt-name { flex-shrink: 0; width: 128px; font-weight: 600; color: var(--text); }
+  .opt-desc { color: var(--muted); min-width: 0; }
+  .opt-desc code { background: var(--surface-2); }
+
+  .dl-table {
+    margin-top: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
   .dl-row {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px 2px; border-bottom: 1px solid var(--border); font-size: 14px;
+    padding: 12px 20px; font-size: 14px;
   }
-  .dl-row:last-child { border-bottom: none; }
+  .dl-row + .dl-row { border-top: 1px solid var(--border); }
   .dl-row .tag {
     font-size: 11px; color: var(--accent); background: var(--accent-soft);
     padding: 1px 8px; border-radius: 999px; font-weight: 600; margin-left: 8px;
   }
   .dl-row .dl-btn {
     font-size: 13px; padding: 6px 14px; border-radius: 8px; flex-shrink: 0;
+    background: var(--surface-2);
   }
   .dl-na { color: var(--muted); font-size: 13px; }
-  .dl-meta { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .dl-meta { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 0 4px; font-size: 13px; color: var(--muted); }
   .dl-meta .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .dl-hint { margin-top: 10px; padding: 0 4px; font-size: 13px; color: var(--muted); }
 
   /* ── quickstart ── */
   .qs-code { background: var(--code-bg); color: var(--code-ink); border-radius: var(--radius); padding: 24px; overflow-x: auto; box-shadow: var(--shadow); }
@@ -242,44 +272,38 @@
         <p>一条命令完成安装与升级,无需 Python / pip。Windows 用 PowerShell,其余平台用 curl。</p>
       </div>
 
-      <div class="install-grid">
-        <div class="card">
-          <h3>macOS / Linux</h3>
-          <p class="card-sub">终端执行,自动识别平台并下载最新版。</p>
-          <div class="cmdbox"><button class="copy" data-copy="curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh">复制</button>curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh</div>
-          <p class="note">重复执行即覆盖升级;<code>--version vX.Y.Z</code> 可固定版本(绕过 GitHub API 限流)。</p>
+      <div class="cmd-panel">
+        <div class="cmd-row">
+          <span class="cmd-tag">macOS / Linux</span>
+          <code class="cmd-line"><button class="copy" data-copy="curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh">复制</button>curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh</code>
         </div>
+        <div class="cmd-row">
+          <span class="cmd-tag">Windows · PowerShell</span>
+          <code class="cmd-line"><button class="copy" data-copy="irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex">复制</button>irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex</code>
+        </div>
+      </div>
+      <p class="panel-note">重复执行即覆盖升级;<code>--version vX.Y.Z</code> 可固定版本(绕过 GitHub API 限流)。安装器自动识别平台、登记 PATH 并写入安装记录。</p>
 
-        <div class="card">
-          <h3>Windows(PowerShell)</h3>
-          <p class="card-sub">PowerShell 5.1+,执行策略不影响此方式。</p>
-          <div class="cmdbox"><button class="copy" data-copy="irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex">复制</button>irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex</div>
-          <p class="note">安装到 <code>%LOCALAPPDATA%\Programs\orzmc</code> 并登记用户 PATH。</p>
+      <h3 class="sub-head">其它方式</h3>
+      <div class="opt-list">
+        <div class="opt-row">
+          <span class="opt-name">PyPI</span>
+          <span class="opt-desc"><code>pip install orzmc-app</code>(需 Python 3.10+);升级 <code>pip install -U orzmc-app</code> · uv 用户 <code>uv tool install orzmc-app</code></span>
+        </div>
+        <div class="opt-row">
+          <span class="opt-name">独立二进制</span>
+          <span class="opt-desc">免 Python / Java,解压即用。自动识别你的平台,也可手动选择:</span>
         </div>
       </div>
 
-      <p style="margin:36px 0 6px;color:var(--muted);font-size:15px;font-weight:600">其它安装方式</p>
-
-      <div class="install-grid">
-        <div class="card">
-          <h3>PyPI</h3>
-          <p class="card-sub">需 Python 3.10+。</p>
-          <div class="cmdbox"><button class="copy" data-copy="pip install orzmc-app">复制</button>pip install orzmc-app</div>
-          <p class="note">升级:<code>pip install -U orzmc-app</code> · uv 用户:<code>uv tool install orzmc-app</code></p>
-        </div>
-
-        <div class="card">
-          <h3>独立二进制</h3>
-          <p class="card-sub">免 Python / Java,解压即用。自动识别你的平台,也可手动选择。</p>
-          <div id="dl-list" aria-live="polite">
-            <div class="dl-row"><span>正在获取最新发布…</span></div>
-          </div>
-          <div id="dl-fallback" hidden>
-            <p class="note">无法读取发布信息 —— 请前往 <a href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">GitHub Releases</a> 选择对应平台的二进制下载。</p>
-          </div>
-          <div class="dl-meta"><span class="dot"></span><span id="dl-version"></span>来自 <a href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">GitHub Releases</a></div>
-        </div>
+      <div class="dl-table" id="dl-list" aria-live="polite">
+        <div class="dl-row"><span>正在获取最新发布…</span></div>
       </div>
+      <div id="dl-hint" class="dl-hint" hidden></div>
+      <div id="dl-fallback" hidden>
+        <p class="panel-note">无法读取发布信息 —— 请前往 <a href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">GitHub Releases</a> 选择对应平台的二进制下载。</p>
+      </div>
+      <div class="dl-meta"><span class="dot"></span><span id="dl-version"></span>来自 <a href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">GitHub Releases</a></div>
     </div>
   </section>
 
@@ -289,33 +313,26 @@
       <div class="sec-head">
         <div class="kicker">Uninstall</div>
         <h2>卸载</h2>
-        <p>推荐使用内置统一卸载:一条命令删除二进制、还原安装器对 PATH 的修改。游戏数据(默认 <code>~/minecraft</code>)默认保留。</p>
+        <p>推荐内置统一卸载:一条命令删除二进制、还原安装器对 PATH 的修改。游戏数据(默认 <code>~/minecraft</code>)默认保留。</p>
       </div>
 
-      <div class="install-grid">
-        <div class="card">
-          <h3>内置统一卸载(推荐)</h3>
-          <p class="card-sub">任意安装方式都适用,自动清理安装记录与 PATH 修改。</p>
-          <div class="cmdbox"><button class="copy" data-copy="orzmc self-uninstall --yes">复制</button>orzmc self-uninstall --yes</div>
-          <p class="note">删除二进制、还原安装器登记的 PATH、清理空目录。<code>--remove-root</code> 连游戏数据一起删;<code>--yes</code> 免确认(脚本化调用)。与 <code>orzmc remove</code>(移除某个 Minecraft 版本)不同,这里卸载的是工具本身。</p>
+      <div class="cmd-panel">
+        <div class="cmd-row">
+          <span class="cmd-tag">内置统一卸载(推荐)</span>
+          <code class="cmd-line"><button class="copy" data-copy="orzmc self-uninstall --yes">复制</button>orzmc self-uninstall --yes</code>
         </div>
       </div>
+      <p class="panel-note">删除二进制、还原 PATH、清理空目录。<code>--remove-root</code> 连游戏数据一起删;<code>--yes</code> 免确认(脚本化调用)。与 <code>orzmc remove</code>(移除某个 Minecraft 版本)不同,这里卸载的是工具本身。</p>
 
-      <p style="margin:36px 0 6px;color:var(--muted);font-size:15px;font-weight:600">按安装方式手动卸载(备用)</p>
-
-      <div class="install-grid">
-        <div class="card">
-          <h3>PyPI 方式</h3>
-          <p class="card-sub">卸载 Python 包。</p>
-          <div class="cmdbox"><button class="copy" data-copy="pip uninstall orzmc-app">复制</button>pip uninstall orzmc-app</div>
-          <p class="note">游戏数据(默认 <code>~/minecraft</code>)不会随包删除,需要时手动 <code>rm -rf ~/minecraft</code>(Windows 为 <code>rd /s %USERPROFILE%\minecraft</code>)。</p>
+      <h3 class="sub-head">手动卸载(备用)</h3>
+      <div class="opt-list">
+        <div class="opt-row">
+          <span class="opt-name">pip 安装</span>
+          <span class="opt-desc"><code>pip uninstall orzmc-app</code>;游戏数据默认保留,需要时手动清理(<code>rm -rf ~/minecraft</code>,Windows 为 <code>rd /s %USERPROFILE%\minecraft</code>)。</span>
         </div>
-
-        <div class="card">
-          <h3>独立二进制</h3>
-          <p class="card-sub">删除下载的 orzmc 可执行文件。</p>
-          <div class="cmdbox"><button class="copy" data-copy="rm -f ~/.local/bin/orzmc">复制</button>rm -f ~/.local/bin/orzmc</div>
-          <p class="note">示例为 <code>~/.local/bin</code>,实际以你放置的目录为准;Windows 删除对应的 <code>orzmc.exe</code>。游戏数据同样不会自动删除。</p>
+        <div class="opt-row">
+          <span class="opt-name">独立二进制</span>
+          <span class="opt-desc">删除对应可执行文件(如 <code>~/.local/bin/orzmc</code> 或 <code>orzmc.exe</code>);游戏数据同样不会自动删除。</span>
         </div>
       </div>
     </div>
@@ -412,18 +429,23 @@ orzmc server -v 26.2 -t paper --yes --nogui</pre></div>
     { id: "windows-arm64",  label: "Windows · ARM64",        file: "orzmc-windows-arm64.exe" }
   ];
 
+  // 设备检测:OS 可靠;架构仅当 UA 出现 arm/aarch 信号时判定。
+  // macOS 的 UA 对 Intel / Apple Silicon 完全一致(都报 "Macintosh; Intel Mac OS X"),
+  // 无法判定架构 —— arch 置空,由渲染层给出如实提示,绝不误标。
   function detectPlatform() {
     try {
       var ua = navigator.userAgent.toLowerCase();
-      var arm = /arm|aarch/i.test(ua);
-      if (navigator.userAgentData) {
-        arm = arm || /arm/i.test(navigator.userAgentData.platform || "") || navigator.userAgentData.architecture === "arm";
-      }
-      if (ua.indexOf("win") !== -1) return arm ? "windows-arm64" : "windows-x86_64";
-      if (ua.indexOf("mac") !== -1) return arm ? "macos-arm64" : "macos-x86_64";
-      if (ua.indexOf("linux") !== -1) return arm ? "linux-arm64" : "linux-x86_64";
+      var os = "";
+      if (ua.indexOf("win") !== -1) os = "windows";
+      else if (ua.indexOf("mac") !== -1) os = "macos";
+      else if (ua.indexOf("linux") !== -1) os = "linux";
+      if (!os) return { os: "", arch: "" };
+      if (os === "macos") return { os: os, arch: "" }; // 无法识别芯片架构
+      var arm = /arm|aarch/.test(ua);
+      if (navigator.userAgentData && navigator.userAgentData.architecture === "arm") arm = true;
+      return { os: os, arch: arm ? "arm64" : "x86_64" };
     } catch (e) { /* best-effort */ }
-    return "";
+    return { os: "", arch: "" };
   }
 
   function render(assets) {
@@ -431,6 +453,17 @@ orzmc server -v 26.2 -t paper --yes --nogui</pre></div>
     var byFile = {};
     (assets || []).forEach(function (a) { byFile[a.name] = a.browser_download_url; });
     var detected = detectPlatform();
+    var hint = document.getElementById("dl-hint");
+    if (hint) {
+      if (detected.os && !detected.arch) {
+        hint.textContent = detected.os === "macos"
+          ? "检测到 macOS,但浏览器无法识别芯片架构(Apple Silicon / Intel),请按需选择对应二进制。"
+          : "";
+        hint.hidden = false;
+      } else {
+        hint.hidden = true;
+      }
+    }
     list.innerHTML = "";
     PLATFORMS.forEach(function (p) {
       var url = byFile[p.file];
@@ -438,7 +471,7 @@ orzmc server -v 26.2 -t paper --yes --nogui</pre></div>
       row.className = "dl-row";
       var label = document.createElement("span");
       label.textContent = p.label;
-      if (p.id === detected) {
+      if (p.id === detected.os + "-" + detected.arch) {
         var tag = document.createElement("span");
         tag.className = "tag";
         tag.textContent = "当前平台";
