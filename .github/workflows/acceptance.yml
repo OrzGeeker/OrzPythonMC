@@ -53,9 +53,9 @@ jobs:
             arch: arm64
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -65,7 +65,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - name: Cache game root (Java + assets + jars)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/orzmc-accept
           key: accept-primary-${{ runner.os }}-${{ runner.arch }}
@@ -87,7 +87,7 @@ jobs:
           ${{ inputs.deep-client && '--deep-client' || '' }}
       - name: Upload acceptance logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: acceptance-logs-${{ runner.os }}-${{ runner.arch }}
           path: ${{ runner.temp }}/orzmc-accept/logs
@@ -110,9 +110,9 @@ jobs:
             arch: x86_64
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -122,7 +122,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - name: Cache game root (Java + assets + jars)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/orzmc-backcompat
           key: accept-backcompat-${{ runner.os }}-${{ runner.arch }}
@@ -136,7 +136,7 @@ jobs:
           ${{ inputs.deep-client && '--deep-client' || '' }}
       - name: Upload acceptance logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: acceptance-logs-${{ runner.os }}-${{ runner.arch }}
           path: ${{ runner.temp }}/orzmc-backcompat/logs
