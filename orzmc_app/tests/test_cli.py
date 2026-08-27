@@ -149,3 +149,39 @@ def test_self_uninstall_error_fails(monkeypatch) -> None:
     result = runner.invoke(app, ["self-uninstall"])
     assert result.exit_code == 1
     assert "检测到疑似开发环境安装" in result.stdout
+
+
+class TestForceUtf8Stdio:
+    """_reconfigure_utf8 / _force_utf8_stdio:Windows 上管道输出中文不崩。"""
+
+    def test_reconfigures_to_utf8_replace(self) -> None:
+        calls: list[dict] = []
+
+        class Fake:
+            def reconfigure(self, **kw) -> None:
+                calls.append(kw)
+
+        from orzmc_app.cli import _reconfigure_utf8
+
+        _reconfigure_utf8(Fake())
+        assert calls == [{"encoding": "utf-8", "errors": "replace"}]
+
+    def test_tolerates_missing_reconfigure(self) -> None:
+        from orzmc_app.cli import _reconfigure_utf8
+
+        _reconfigure_utf8(object())  # 无 reconfigure → no-op,不抛
+
+    def test_tolerates_reconfigure_error(self) -> None:
+        class Fake:
+            def reconfigure(self, **kw) -> None:
+                raise ValueError("closed stream")
+
+        from orzmc_app.cli import _reconfigure_utf8
+
+        _reconfigure_utf8(Fake())  # 出错被吞,不抛
+
+    def test_force_utf8_stdio_noop_on_capture(self) -> None:
+        """pytest 捕获模式下 sys.stdout 无 reconfigure,调用应安全 no-op。"""
+        from orzmc_app.cli import _force_utf8_stdio
+
+        _force_utf8_stdio()
