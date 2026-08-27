@@ -10,6 +10,14 @@ dev = [
     "psutil>=6.0",
 ]
 
+[tool.uv]
+# 只使用 uv 管理的 standalone Python(python-build-standalone,非 framework)。
+# macOS CI runner 镜像预装 /Library/Frameworks/Python.framework(python.org 布局),
+# uv 默认 python-preference 会在 managed 缺失时退回系统 Python → 建出的 venv 是
+# framework 布局 → PyInstaller 打包进整个 Python.framework,frozen 启动 dlopen 它
+# 要 ~14s(embed 模式仅 ~1.5s)。only-managed 从根上排除该分支。
+python-preference = "only-managed"
+
 [tool.uv.workspace]
 members = ["orzmc", "orzmc_app"]
 

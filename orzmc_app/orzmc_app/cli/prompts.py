@@ -3,15 +3,39 @@
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 from rich.console import Console
 from rich.prompt import Confirm
 
-from orzmc import remote_version_catalog
-
-from .picker import run_picker
-
 _console = Console(highlight=False)
+
+# 惰性名称(PEP 562):下面两个名字由模块 __getattr__ 在首次访问时导入,
+# 避免每个 CLI 命令都付 prompt_toolkit / requests 的导入成本。类型注解只是
+# 占位(不创建运行时属性),让 ruff F821 / mypy 认识它们。
+remote_version_catalog: Any
+run_picker: Any
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily resolve the two heavy names used only by the interactive picker.
+
+    ``remote_version_catalog`` pulls ``orzmc`` → requests/urllib3, and
+    ``run_picker`` pulls prompt_toolkit (~110ms of imports together). Loading
+    them at module import would make every CLI command — even ``orzmc
+    version`` — pay that cost. PEP 562 defers until the first TTY picker;
+    ``monkeypatch.setattr`` in tests still works because it sets the attribute
+    on the module directly, bypassing ``__getattr__``.
+    """
+    if name == "remote_version_catalog":
+        from orzmc import remote_version_catalog
+
+        return remote_version_catalog
+    if name == "run_picker":
+        from .picker import run_picker
+
+        return run_picker
+    raise AttributeError(name)
 
 
 def is_interactive() -> bool:
@@ -32,7 +56,7 @@ def resolve_version(version: str | None, root_dir: str | None) -> str | None:
     if not is_interactive():
         return None
     try:
-        catalog = remote_version_catalog(root_dir=root_dir)
+        catalog = remote_version_catalog(root_dir=root_dir)  # noqa: F821 - 惰性,见模块 __getattr__
     except Exception as exc:
         _console.print(f"[yellow]无法获取版本列表({exc}),回车使用最新[/yellow]")
         return None
@@ -40,7 +64,7 @@ def resolve_version(version: str | None, root_dir: str | None) -> str | None:
         _console.print("[yellow]版本清单为空,回车使用最新[/yellow]")
         return None
     try:
-        return run_picker(catalog)
+        return run_picker(catalog)  # noqa: F821 - 惰性,见模块 __getattr__
     except Exception as exc:  # never crash the CLI on TUI trouble
         _console.print(f"[yellow]版本选择器异常({exc}),回车使用最新[/yellow]")
         return None

@@ -18,7 +18,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _check_python() -> None:
+    """Abort on macOS framework Pythons so a slow binary can never be built.
+
+    PyInstaller on a framework-layout Python (python.org / Homebrew, base_prefix
+    contains ``Python.framework``) bundles the whole 8MB framework dylib and the
+    frozen binary dlopens it at startup — ~14s instead of ~1.5s for the uv
+    standalone (embed) layout. uv's ``python-preference = "only-managed"`` keeps
+    every build on the standalone interpreter; this guard makes any regression a
+    loud build failure instead of a silently slow release.
+    """
+    if sys.platform != "darwin":
+        return
+    if "Python.framework" in sys.base_prefix:
+        raise SystemExit(
+            "build.py: 当前解释器是 macOS framework Python "
+            f"({sys.base_prefix});PyInstaller 会打包 Python.framework,"
+            "frozen 启动需 ~14s。请用非 framework(uv standalone)Python 构建:"
+            '确保 pyproject.toml [tool.uv] python-preference = "only-managed" 生效。'
+        )
+
+
 def main() -> int:
+    _check_python()
     parser = argparse.ArgumentParser(description="Build the orzmc-app single-file binary into dist/.")
     parser.add_argument("--name", default="orzmc", help="Binary base name (e.g. orzmc-linux-arm64); default: orzmc")
     args = parser.parse_args()

@@ -104,6 +104,10 @@ jobs:
           - os: windows-11-arm
             arch: arm64
     timeout-minutes: 30
+    # only-managed 兜底:macOS runner 镜像预装 framework Python,uv 默认会退回
+    # 系统解释器 → PyInstaller framework 模式(启动 ~14s)。强制 uv 只用 standalone。
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -115,6 +119,17 @@ jobs:
         run: uv sync --frozen --all-packages
       - name: Build binary
         run: uv run --package orzmc-app python scripts/build.py
+      # macOS:framework 模式构建会链接 Python.framework,产物启动 ~14s(embed ~1.5s)。
+      # 断言产物不链接它,让慢二进制永远发不出去。
+      - name: Assert embed-mode build (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if otool -L dist/orzmc* | grep -q "Python.framework"; then
+            echo "::error::Binary links Python.framework (framework-mode PyInstaller, ~14s startup). Check pyproject.toml [tool.uv] python-preference = \"only-managed\"."
+            exit 1
+          fi
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
@@ -149,6 +164,8 @@ jobs:
           - os: windows-11-arm
             arch: arm64
     timeout-minutes: 30
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v4
       - name: Install uv

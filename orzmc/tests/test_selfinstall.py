@@ -26,9 +26,15 @@ def _has(reporter: FakeReporter, fragment: str) -> bool:
     return any(fragment in text for text in reporter.texts)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def state_dir(tmp_path, monkeypatch) -> str:
-    """Redirect the manifest state dir into tmp; works on Unix and Windows."""
+    """Redirect the manifest state dir into tmp; works on Unix and Windows.
+
+    autouse: EVERY test in this module must be hermetic. A test that calls
+    ``SelfUninstaller.uninstall`` without redirecting ``XDG_STATE_HOME`` falls
+    through to the real ``~/.local/state/orzmc/install.conf`` and would
+    uninstall the developer's actual install (deleted a real binary once).
+    """
     state = str(tmp_path / "state")
     monkeypatch.setenv("XDG_STATE_HOME", state)
     monkeypatch.setenv("LOCALAPPDATA", state)
