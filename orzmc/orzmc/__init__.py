@@ -22,6 +22,7 @@ from orzmc.infra.progress import NullProgress, ProgressSink, RichProgress
 from orzmc.services.backup import Backup
 from orzmc.services.client import ClientService
 from orzmc.services.context import AppContext, Services
+from orzmc.services.selfinstall import InstallManifest, SelfUninstaller
 from orzmc.services.server import ServerService
 from orzmc.services.versions import InstalledVersion, VersionManager
 from orzmc.version import __version__
@@ -35,6 +36,7 @@ __all__ = [
     "ClientService",
     "FileStore",
     "GameType",
+    "InstallManifest",
     "InstalledVersion",
     "Library",
     "NullProgress",
@@ -68,6 +70,7 @@ __all__ = [
     "remove_version",
     "required_java_major",
     "resolve_libraries",
+    "uninstall_self",
 ]
 
 # ── entry points ─────────────────────────────────────────────────────────────
@@ -142,6 +145,28 @@ def remove_version(
     consulted unless ``yes`` is set."""
     manager = VersionManager(root_dir=root_dir)
     return manager.remove(version, is_client=is_client, game_type=game_type, yes=yes, confirm=confirm)
+
+
+def uninstall_self(
+    binary: str,
+    *,
+    root_dir: str | None = None,
+    remove_root: bool = False,
+    yes: bool = False,
+    force: bool = False,
+    reporter: Reporter | None = None,
+    confirm: Callable[[str], bool] | None = None,
+) -> bool:
+    """Uninstall the tool itself: remove ``binary``, restore PATH, optional data.
+
+    Reads the install manifest written by the one-line installer. ``confirm``
+    is consulted for game-data removal unless ``remove_root`` (delete without
+    asking) or ``yes`` (default to keep) applies. Returns True when the binary
+    was removed.
+    """
+    return SelfUninstaller(reporter=reporter, root_dir=root_dir).uninstall(
+        binary, remove_root=remove_root, yes=yes, force=force, confirm=confirm
+    )
 
 
 def backup_world(

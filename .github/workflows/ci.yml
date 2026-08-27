@@ -121,3 +121,72 @@ jobs:
           name: orzmc-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/orzmc*
           if-no-files-found: error
+
+  # End-to-end installer check on all 6 platforms: build the binary locally,
+  # install via the one-line installer (--file seam + hermetic env so we never
+  # touch the real PATH/rc/user dirs), run `orzmc self-uninstall --yes`, and
+  # assert the binary + install manifest are gone. Push-only like `binary`:
+  # the latest released binary predates self-uninstall, so e2e must use a
+  # local build (the "chicken-and-egg" seam) rather than pulling a release.
+  installer:
+    needs: quality
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+          - os: macos-15
+            arch: arm64
+          - os: windows-latest
+            arch: x86_64
+          - os: windows-11-arm
+            arch: arm64
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages
+      - name: Build binary
+        run: uv run --package orzmc-app python scripts/build.py
+
+      # Unix: install to a temp dir with XDG_STATE_HOME redirected and rc
+      # untouched; self-uninstall then deletes the binary + manifest.
+      - name: Installer e2e (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          XDG_STATE_HOME: "${{ runner.temp }}/orzmc-state"
+        run: |
+          set -euxo pipefail
+          sh docs/install.sh --file "$PWD/dist/orzmc" --dir "$RUNNER_TEMP/orzmc-install" --no-modify-rc
+          "$RUNNER_TEMP/orzmc-install/orzmc" version
+          "$RUNNER_TEMP/orzmc-install/orzmc" self-uninstall --yes
+          test ! -e "$RUNNER_TEMP/orzmc-install/orzmc"
+          test ! -e "$XDG_STATE_HOME/orzmc/install.conf"
+
+      # Windows: LOCALAPPDATA redirected + ORZMC_NO_RC=1 keeps the install
+      # fully hermetic; `powershell -File` runs the installer on PS 5.1.
+      - name: Installer e2e (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          LOCALAPPDATA: "${{ runner.temp }}\\orzmc-state"
+          ORZMC_NO_RC: "1"
+        run: |
+          powershell -NoProfile -File docs/install.ps1 -file "$PWD\dist\orzmc.exe" -dir "$env:RUNNER_TEMP\orzmc-install"
+          & "$env:RUNNER_TEMP\orzmc-install\orzmc.exe" version
+          & "$env:RUNNER_TEMP\orzmc-install\orzmc.exe" self-uninstall --yes
+          if (Test-Path "$env:RUNNER_TEMP\orzmc-install\orzmc.exe") { throw "self-uninstall left the binary" }
+          if (Test-Path "$env:LOCALAPPDATA\orzmc\install.conf") { throw "self-uninstall left the install manifest" }

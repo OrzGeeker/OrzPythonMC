@@ -26,7 +26,7 @@ def test_version() -> None:
 def test_help_lists_all_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for name in ("client", "server", "remove", "list", "backup", "version"):
+    for name in ("client", "server", "remove", "list", "backup", "version", "self-uninstall"):
         assert name in result.stdout
 
 
@@ -107,3 +107,45 @@ def test_bad_memory_rejected() -> None:
     result = runner.invoke(app, ["client", "--minmem", "huge", "--version", "1.20.4"])
     assert result.exit_code == 1
     assert "无效内存" in result.stdout
+
+
+def test_self_uninstall_calls_public_api(monkeypatch) -> None:
+    calls: list[tuple] = []
+
+    def fake_uninstall(binary, **kwargs) -> bool:
+        calls.append((binary, kwargs))
+        return True
+
+    monkeypatch.setattr(app_module, "uninstall_self", fake_uninstall)
+    result = runner.invoke(app, ["self-uninstall", "--yes", "--force", "--root-dir", "/tmp/mc-root"])
+    assert result.exit_code == 0, result.stdout
+    assert calls
+    binary, kwargs = calls[0]
+    assert binary  # sys.argv[0] 解析后的绝对路径
+    assert kwargs["yes"] is True
+    assert kwargs["force"] is True
+    assert kwargs["root_dir"] == "/tmp/mc-root"
+    assert kwargs["remove_root"] is False
+
+
+def test_self_uninstall_removes_root_when_flagged(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    def fake_uninstall(binary, **kwargs) -> bool:
+        calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(app_module, "uninstall_self", fake_uninstall)
+    result = runner.invoke(app, ["self-uninstall", "--remove-root"])
+    assert result.exit_code == 0, result.stdout
+    assert calls[0]["remove_root"] is True
+
+
+def test_self_uninstall_error_fails(monkeypatch) -> None:
+    def fake_uninstall(binary, **kwargs) -> bool:
+        raise RuntimeError("检测到疑似开发环境安装")
+
+    monkeypatch.setattr(app_module, "uninstall_self", fake_uninstall)
+    result = runner.invoke(app, ["self-uninstall"])
+    assert result.exit_code == 1
+    assert "检测到疑似开发环境安装" in result.stdout

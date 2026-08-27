@@ -8,6 +8,8 @@ defaults to Mojang latest when neither ``-v`` nor a TTY prompt is available).
 from __future__ import annotations
 
 import re
+import sys
+from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
@@ -23,6 +25,7 @@ from orzmc import (
     launch_client,
     list_versions,
     remove_version,
+    uninstall_self,
 )
 from orzmc import (
     __version__ as LIB_VERSION,
@@ -195,6 +198,39 @@ def remove(
         _console.print(f"[success]已移除 {version}[/success]")
     else:
         _console.print("[yellow]已取消移除[/yellow]")
+
+
+@app.command("self-uninstall")
+def self_uninstall(
+    ctx: typer.Context,
+    yes: Annotated[bool, typer.Option("--yes", help="跳过确认(游戏数据默认保留)")] = False,
+    remove_root: Annotated[
+        bool, typer.Option("--remove-root", help="连游戏数据根目录(默认 ~/minecraft)一起删除")
+    ] = False,
+    force: Annotated[bool, typer.Option("--force", help="绕过安全护栏(用于开发环境安装)")] = False,
+    root_dir: RootDir = None,
+) -> None:
+    """卸载工具本身:删除二进制、还原 PATH、可选删除游戏数据。
+
+    与 ``remove``(移除 Minecraft 版本)不同,``self-uninstall`` 删除的是
+    ``orzmc`` 自身。游戏数据默认保留;``--remove-root`` 连 ``~/minecraft`` 一起删。
+    """
+    binary = str(Path(sys.argv[0]).resolve())
+    try:
+        uninstall_self(
+            binary,
+            root_dir=root_dir,
+            remove_root=remove_root,
+            yes=yes,
+            force=force,
+            reporter=RichReporter(verbose=bool(ctx.obj.get("verbose"))),
+            # 非交互时无法确认,交给库默认保留游戏数据;交互时弹 rich 确认。
+            confirm=(
+                (lambda desc: bool(Confirm.ask(f"{desc}\n确定删除吗?", default=False))) if is_interactive() else None
+            ),
+        )
+    except Exception as exc:
+        _fail(str(exc))
 
 
 @app.command()
