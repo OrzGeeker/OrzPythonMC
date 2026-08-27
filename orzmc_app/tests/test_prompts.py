@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from orzmc import VersionEntry
+from orzmc_app.cli import picker as picker_module
 from orzmc_app.cli import prompts as prompts_module
 from orzmc_app.cli.prompts import resolve_version
 
@@ -17,6 +18,22 @@ CATALOG = [
 
 
 class TestResolveVersion:
+    def test_lazy_names_resolve_via_module_getattr(self, monkeypatch) -> None:
+        """回归:惰性名必须经模块 __getattr__ 解析,而非函数内裸全局名。
+
+        原实现在 resolve_version 里直接引用 remote_version_catalog(LOAD_GLOBAL)。
+        模块 __getattr__ 只对 ``module.attr`` 式访问生效,裸全局名不触发 → 交互
+        路径 NameError(frozen 真机报 name 'remote_version_catalog' is not defined)。
+        本测试不预置 prompts 模块属性,只在源模块(orzmc / picker)打桩,
+        强制走 __getattr__ 兜底 —— 旧代码下返回 None,本断言即失败。
+        """
+        import orzmc as orzmc_module
+
+        monkeypatch.setattr(orzmc_module, "remote_version_catalog", lambda root_dir=None: CATALOG)
+        monkeypatch.setattr(picker_module, "run_picker", lambda catalog: "1.21.4")
+        monkeypatch.setattr(prompts_module, "is_interactive", lambda: True)
+        assert resolve_version(None, None) == "1.21.4"
+
     def test_explicit_version_skips_prompt(self) -> None:
         assert resolve_version("1.20.4", None) == "1.20.4"
 
