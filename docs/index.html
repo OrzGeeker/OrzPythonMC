@@ -116,9 +116,9 @@
   .hero .meta b { color: var(--text); font-weight: 600; }
 
   /* ── sections ── */
-  section { padding: 72px 0; }
+  section { padding: 56px 0; }
   section + section { border-top: 1px solid var(--border); }
-  .sec-head { margin-bottom: 40px; }
+  .sec-head { margin-bottom: 28px; }
   .sec-head .kicker {
     font-size: 13px; font-weight: 600; letter-spacing: .08em;
     text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
@@ -163,18 +163,9 @@
   .panel-note code { background: var(--surface-2); }
 
   .sub-head {
-    margin: 44px 0 12px; font-size: 13px; font-weight: 600;
+    margin: 28px 0 10px; font-size: 13px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
   }
-  .opt-list { border-top: 1px solid var(--border); }
-  .opt-row {
-    display: flex; align-items: baseline; gap: 20px;
-    padding: 14px 4px; border-bottom: 1px solid var(--border);
-    font-size: 14px;
-  }
-  .opt-name { flex-shrink: 0; width: 128px; font-weight: 600; color: var(--text); }
-  .opt-desc { color: var(--muted); min-width: 0; }
-  .opt-desc code { background: var(--surface-2); }
 
   .dl-table {
     margin-top: 20px;
@@ -234,8 +225,7 @@
   <div class="wrap nav">
     <a class="brand" href="#top">OrzMC <span class="ver">2.x</span></a>
     <nav class="nav-links">
-      <a href="#install">安装</a>
-      <a href="#uninstall">卸载</a>
+      <a href="#install">安装 / 卸载</a>
       <a href="#quickstart">快速开始</a>
       <a href="#features">特性</a>
       <a href="https://github.com/OrzMC/OrzPythonMC" target="_blank" rel="noopener">GitHub</a>
@@ -263,13 +253,13 @@
     </div>
   </section>
 
-  <!-- install -->
+  <!-- install + uninstall -->
   <section id="install">
     <div class="wrap">
       <div class="sec-head">
-        <div class="kicker">Install</div>
-        <h2>一键安装</h2>
-        <p>一条命令完成安装与升级,无需 Python / pip。Windows 用 PowerShell,其余平台用 curl。</p>
+        <div class="kicker">Install · Uninstall</div>
+        <h2>安装与卸载</h2>
+        <p>无需 Python / pip。Windows 用 PowerShell,其余平台用 curl;重复执行安装即升级。</p>
       </div>
 
       <div class="cmd-panel">
@@ -281,21 +271,14 @@
           <span class="cmd-tag">Windows · PowerShell</span>
           <code class="cmd-line"><button class="copy" data-copy="irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex">复制</button>irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex</code>
         </div>
-      </div>
-      <p class="panel-note">重复执行即覆盖升级;<code>--version vX.Y.Z</code> 可固定版本(绕过 GitHub API 限流)。安装器自动识别平台、登记 PATH 并写入安装记录。</p>
-
-      <h3 class="sub-head">其它方式</h3>
-      <div class="opt-list">
-        <div class="opt-row">
-          <span class="opt-name">PyPI</span>
-          <span class="opt-desc"><code>pip install orzmc-app</code>(需 Python 3.10+);升级 <code>pip install -U orzmc-app</code> · uv 用户 <code>uv tool install orzmc-app</code></span>
-        </div>
-        <div class="opt-row">
-          <span class="opt-name">独立二进制</span>
-          <span class="opt-desc">免 Python / Java,解压即用。自动识别你的平台,也可手动选择:</span>
+        <div class="cmd-row" id="uninstall">
+          <span class="cmd-tag">卸载 · 全平台</span>
+          <code class="cmd-line"><button class="copy" data-copy="orzmc self-uninstall --yes">复制</button>orzmc self-uninstall --yes</code>
         </div>
       </div>
+      <p class="panel-note">安装自动识别平台、登记 PATH;卸载删除二进制、还原 PATH,游戏数据默认保留(<code>--remove-root</code> 一并删除)。<code>--version vX.Y.Z</code> 可固定安装版本。</p>
 
+      <h3 class="sub-head">独立二进制</h3>
       <div class="dl-table" id="dl-list" aria-live="polite">
         <div class="dl-row"><span>正在获取最新发布…</span></div>
       </div>
@@ -304,37 +287,6 @@
         <p class="panel-note">无法读取发布信息 —— 请前往 <a href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">GitHub Releases</a> 选择对应平台的二进制下载。</p>
       </div>
       <div class="dl-meta"><span class="dot"></span><span id="dl-version"></span>来自 <a href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">GitHub Releases</a></div>
-    </div>
-  </section>
-
-  <!-- uninstall -->
-  <section id="uninstall">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="kicker">Uninstall</div>
-        <h2>卸载</h2>
-        <p>推荐内置统一卸载:一条命令删除二进制、还原安装器对 PATH 的修改。游戏数据(默认 <code>~/minecraft</code>)默认保留。</p>
-      </div>
-
-      <div class="cmd-panel">
-        <div class="cmd-row">
-          <span class="cmd-tag">内置统一卸载(推荐)</span>
-          <code class="cmd-line"><button class="copy" data-copy="orzmc self-uninstall --yes">复制</button>orzmc self-uninstall --yes</code>
-        </div>
-      </div>
-      <p class="panel-note">删除二进制、还原 PATH、清理空目录。<code>--remove-root</code> 连游戏数据一起删;<code>--yes</code> 免确认(脚本化调用)。与 <code>orzmc remove</code>(移除某个 Minecraft 版本)不同,这里卸载的是工具本身。</p>
-
-      <h3 class="sub-head">手动卸载(备用)</h3>
-      <div class="opt-list">
-        <div class="opt-row">
-          <span class="opt-name">pip 安装</span>
-          <span class="opt-desc"><code>pip uninstall orzmc-app</code>;游戏数据默认保留,需要时手动清理(<code>rm -rf ~/minecraft</code>,Windows 为 <code>rd /s %USERPROFILE%\minecraft</code>)。</span>
-        </div>
-        <div class="opt-row">
-          <span class="opt-name">独立二进制</span>
-          <span class="opt-desc">删除对应可执行文件(如 <code>~/.local/bin/orzmc</code> 或 <code>orzmc.exe</code>);游戏数据同样不会自动删除。</span>
-        </div>
-      </div>
     </div>
   </section>
 
