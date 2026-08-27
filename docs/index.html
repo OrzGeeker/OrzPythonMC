@@ -205,6 +205,7 @@
     <a class="brand" href="#top">OrzMC <span class="ver">2.x</span></a>
     <nav class="nav-links">
       <a href="#install">安装</a>
+      <a href="#uninstall">卸载</a>
       <a href="#quickstart">快速开始</a>
       <a href="#features">特性</a>
       <a href="https://github.com/OrzMC/OrzPythonMC" target="_blank" rel="noopener">GitHub</a>
@@ -219,7 +220,7 @@
     <div class="wrap">
       <div class="badge">开源 · Apache-2.0 · 跨平台</div>
       <h1>Minecraft 客户端启动 / 服务端部署,<span class="accent">一条命令</span>搞定</h1>
-      <p class="sub">OrzMC 是跨平台 Minecraft 启动与部署工具:多版本并存、Java 运行时自动托管、文件缺失自动补齐。无论你在 macOS、Linux 还是 Windows 上,<code>pip install orzmc-app</code> 即刻开始。</p>
+      <p class="sub">OrzMC 是跨平台 Minecraft 启动与部署工具:多版本并存、Java 运行时自动托管、文件缺失自动补齐。无论你在 macOS、Linux 还是 Windows 上,一条命令即刻开始。</p>
       <div class="cta">
         <a class="btn btn-primary" href="#install">一键安装</a>
         <a class="btn btn-secondary" href="https://github.com/OrzMC/OrzPythonMC/releases" target="_blank" rel="noopener">下载二进制</a>
@@ -238,17 +239,33 @@
       <div class="sec-head">
         <div class="kicker">Install</div>
         <h2>一键安装</h2>
-        <p>两种方式任选其一。用 PyPI 一条命令即可;或者下载独立二进制,解压即用,连 Python 都不需要。</p>
+        <p>一条命令完成安装与升级,无需 Python / pip。Windows 用 PowerShell,其余平台用 curl。</p>
       </div>
 
       <div class="install-grid">
         <div class="card">
-          <h3>PyPI 一键安装</h3>
-          <p class="card-sub">推荐。需要 Python 3.10+。</p>
+          <h3>macOS / Linux</h3>
+          <p class="card-sub">终端执行,自动识别平台并下载最新版。</p>
+          <div class="cmdbox"><button class="copy" data-copy="curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh">复制</button>curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh</div>
+          <p class="note">重复执行即覆盖升级;<code>--version vX.Y.Z</code> 可固定版本(绕过 GitHub API 限流)。</p>
+        </div>
+
+        <div class="card">
+          <h3>Windows(PowerShell)</h3>
+          <p class="card-sub">PowerShell 5.1+,执行策略不影响此方式。</p>
+          <div class="cmdbox"><button class="copy" data-copy="irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex">复制</button>irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex</div>
+          <p class="note">安装到 <code>%LOCALAPPDATA%\Programs\orzmc</code> 并登记用户 PATH。</p>
+        </div>
+      </div>
+
+      <p style="margin:36px 0 6px;color:var(--muted);font-size:15px;font-weight:600">其它安装方式</p>
+
+      <div class="install-grid">
+        <div class="card">
+          <h3>PyPI</h3>
+          <p class="card-sub">需 Python 3.10+。</p>
           <div class="cmdbox"><button class="copy" data-copy="pip install orzmc-app">复制</button>pip install orzmc-app</div>
-          <p class="note">
-            升级:<code>pip install -U orzmc-app</code> · uv 用户:<code>uv tool install orzmc-app</code>
-          </p>
+          <p class="note">升级:<code>pip install -U orzmc-app</code> · uv 用户:<code>uv tool install orzmc-app</code></p>
         </div>
 
         <div class="card">
@@ -266,6 +283,44 @@
     </div>
   </section>
 
+  <!-- uninstall -->
+  <section id="uninstall">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Uninstall</div>
+        <h2>卸载</h2>
+        <p>推荐使用内置统一卸载:一条命令删除二进制、还原安装器对 PATH 的修改。游戏数据(默认 <code>~/minecraft</code>)默认保留。</p>
+      </div>
+
+      <div class="install-grid">
+        <div class="card">
+          <h3>内置统一卸载(推荐)</h3>
+          <p class="card-sub">任意安装方式都适用,自动清理安装记录与 PATH 修改。</p>
+          <div class="cmdbox"><button class="copy" data-copy="orzmc self-uninstall --yes">复制</button>orzmc self-uninstall --yes</div>
+          <p class="note">删除二进制、还原安装器登记的 PATH、清理空目录。<code>--remove-root</code> 连游戏数据一起删;<code>--yes</code> 免确认(脚本化调用)。与 <code>orzmc remove</code>(移除某个 Minecraft 版本)不同,这里卸载的是工具本身。</p>
+        </div>
+      </div>
+
+      <p style="margin:36px 0 6px;color:var(--muted);font-size:15px;font-weight:600">按安装方式手动卸载(备用)</p>
+
+      <div class="install-grid">
+        <div class="card">
+          <h3>PyPI 方式</h3>
+          <p class="card-sub">卸载 Python 包。</p>
+          <div class="cmdbox"><button class="copy" data-copy="pip uninstall orzmc-app">复制</button>pip uninstall orzmc-app</div>
+          <p class="note">游戏数据(默认 <code>~/minecraft</code>)不会随包删除,需要时手动 <code>rm -rf ~/minecraft</code>(Windows 为 <code>rd /s %USERPROFILE%\minecraft</code>)。</p>
+        </div>
+
+        <div class="card">
+          <h3>独立二进制</h3>
+          <p class="card-sub">删除下载的 orzmc 可执行文件。</p>
+          <div class="cmdbox"><button class="copy" data-copy="rm -f ~/.local/bin/orzmc">复制</button>rm -f ~/.local/bin/orzmc</div>
+          <p class="note">示例为 <code>~/.local/bin</code>,实际以你放置的目录为准;Windows 删除对应的 <code>orzmc.exe</code>。游戏数据同样不会自动删除。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- quickstart -->
   <section id="quickstart">
     <div class="wrap">
@@ -274,8 +329,8 @@
         <h2>快速开始</h2>
         <p>安装后直接命令行使用;版本缺失时自动下载补齐,无需单独的 install 步骤。</p>
       </div>
-      <div class="qs-code"><pre><span class="cm"># 安装(需要 Python 3.10+)</span>
-pip install orzmc-app
+      <div class="qs-code"><pre><span class="cm"># 安装(Unix 一条命令;Windows 用 irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex)</span>
+curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh
 
 <span class="cm"># 启动最新版(26.2)原版客户端;-v 缺省时自动用 Mojang 最新 release</span>
 orzmc client -v 26.2

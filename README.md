@@ -17,16 +17,45 @@
 
 ## 安装
 
-**方式一:PyPI(推荐,需 Python 3.10+)**
+**方式一:一条命令(推荐,无需 Python / pip)**
+
+macOS / Linux:
 
 ```bash
-pip install orzmc-app
-orzmc --help
+curl -fsSL https://orzmc.github.io/OrzPythonMC/install.sh | sh
 ```
 
-**方式二:独立二进制(无需 Python / Java)**
+Windows(PowerShell 5.1+):
 
-从 [Releases](https://github.com/OrzMC/OrzPythonMC/releases) 下载对应平台的二进制(`orzmc-macos-*` / `orzmc-linux-*` / `orzmc-windows-*`),解压后直接运行。官网页面会自动识别你的平台,给出对应下载链接。
+```powershell
+irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex
+```
+
+安装器自动识别平台、下载最新二进制、登记 PATH 并写入安装记录;重复执行即覆盖升级。更多选项见 `install.sh --help`(`--version vX.Y.Z` 固定版本、`--dir` 自定义目录等)。
+
+**方式二:其它方式**
+
+- **PyPI**(需 Python 3.10+):`pip install orzmc-app`
+- **独立二进制**:从 [Releases](https://github.com/OrzMC/OrzPythonMC/releases) 下载对应平台的二进制(`orzmc-macos-*` / `orzmc-linux-*` / `orzmc-windows-*`),解压后直接运行。官网页面会自动识别你的平台,给出对应下载链接。
+- **uv 用户**:`uv tool install orzmc-app`(卸载用 `uv tool uninstall orzmc-app`)
+
+## 卸载
+
+**内置统一卸载(推荐)**
+
+```bash
+orzmc self-uninstall [--yes] [--remove-root] [--force]
+```
+
+- 删除 orzmc 二进制、还原安装器登记的 PATH 修改、清理空目录。
+- 游戏数据(默认 `~/minecraft`)默认保留;`--remove-root` 连游戏数据一起删;`--yes` 免确认(脚本化调用)。
+- 与 `orzmc remove`(移除某个 **Minecraft 版本**)不同,`self-uninstall` 卸载的是**工具本身**。
+
+**按安装方式手动卸载(备用)**
+
+- pip 安装:`pip uninstall orzmc-app`
+- 独立二进制:删除对应可执行文件(如 `~/.local/bin/orzmc` 或 `orzmc.exe`)
+- 游戏数据同样默认保留,需要时手动清理(如 `rm -rf ~/minecraft`)。
 
 ## 快速开始
 
@@ -57,6 +86,7 @@ orzmc server   [-v VER] [-t vanilla|paper|fabric|forge] [-m MIN] [-x MAX]
                [--force-upgrade] [--symlink] [--force-download] [--yes]
                [--jvm-opts ...] [--server-args ...] [--nogui]
 orzmc remove   -v VER [--server -t TYPE] [--yes]
+orzmc self-uninstall [--yes] [--remove-root] [--force]
 orzmc list
 orzmc backup   [-v VER] [-t TYPE]
 orzmc version

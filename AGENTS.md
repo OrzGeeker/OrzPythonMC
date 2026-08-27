@@ -48,6 +48,8 @@ python/                         # uv workspace 根
   pyproject.toml  uv.lock  AGENTS.md  README.md
   .github/workflows/{ci,acceptance,release,pages}.yml  scripts/{build,acceptance}.py
   docs/index.html                # 官网(静态单页,GitHub Pages 托管)
+  docs/install.sh  install.ps1   # 一键安装器(Unix sh / Windows PowerShell)
+  docs/installer-design.md       # 安装器方案设计(历史评审稿,参考)
   orzmc/                        # 库包(name="orzmc",py.typed)
     pyproject.toml
     orzmc/  version.py  __init__.py
@@ -75,6 +77,33 @@ python/                         # uv workspace 根
   cache/version_manifest.json  cache/versions/  cache/download_tmp/
   backup/worlds/  backup/music/<v>/
 ```
+
+## 一键安装 / 卸载(两层安装器)
+
+**设计**:平台专用脚本负责「下载 + 落盘 + 登记 PATH + 写安装记录(manifest)」;平台无关的 `orzmc self-uninstall` 内置命令负责「读 manifest → 还原 PATH → 删二进制 → 清理空目录」。脚本与命令都只删/改自己登记过的东西,不动用户已有内容。卸载只 `rmdir` 空目录,绝不 rmtree 共享目录(如 `~/.local/bin`)。
+
+**安装记录 `install.conf`(key=value 格式,非 JSON)**:
+- 位置:Unix `${XDG_STATE_HOME:-$HOME/.local/state}/orzmc/install.conf`;Windows `%LOCALAPPDATA%\orzmc\install.conf`(库侧 `default_state_dir()` 是 CI 隔离的关键接缝)。
+- 字段:`tool schema version platform install_dir binary source path_file path_line root_dir`;可选字段为空则不写行。Windows 不写 `path_file`,`path_line` 记 install_dir token(卸载只按 token 从 User PATH 移除)。
+- **PS 5.1 `Set-Content -Encoding UTF8` 写 BOM**,库侧读取一律 `utf-8-sig`。
+
+**`docs/install.sh`(严格 POSIX sh)**:`set -eu`;无数组 / 无 `[[ ]]` / 无 `&>` / 无 `sed -i` / 无 jq,环境变量一律 `${VAR:-default}`。下载产物 magic 校验(`od -An -tx1 -N4`:Mach-O `cffaedfe` / ELF `7f454c46`;HTML/JSON 拒绝)。PATH 登记用 `$SHELL` 选 `.zshrc`/`.bashrc`/`.profile`,运行期 `case ":$PATH:"` 判已在 + `grep -Fqx` 判行重复,卸载用 `grep -Fvx` 删精确行(仅当行存在才写回)。选项:`--version vX.Y.Z`(固定版本,绕过 GitHub API 限流)/ `--dir` / `--no-modify-rc`(或 `ORZMC_NO_RC=1`)/ `--file`(本地安装,测试接缝)/ `--uninstall`(shell 兜底)。
+
+**`docs/install.ps1`(PowerShell 5.1+)**:
+- **不用 `param()` 块**(兼容 `irm | iex`,脚本内容被求值时无参数表),参数从 `$args` 手工 token 解析;共享状态统一 `$script:` 前缀,保证 `-File`(脚本作用域)与 iex(调用方全局作用域)两调用方式行为一致。
+- **不显式 `exit`**(iex 下会连宿主 PowerShell 窗口一起关);错误用 `die` → `throw`(`-File` 下未捕获异常退出码 1,iex 下只报错、宿主窗口保留)。
+- 开头保存、`finally` 恢复 `$ErrorActionPreference`/`$ProgressPreference`,避免污染 iex 宿主全局状态。
+- 架构探测:`PROCESSOR_ARCHITEW6432`(32 位 PS 取真实架构)兜底 `PROCESSOR_ARCHITECTURE`;下载产物校验 PE 头 `MZ`;PATH 追加 User env var(`;` 分 token 判重)。
+- **已知坑**:`Join-Path $null "x"` 在 EAP=Stop 下仍是非终止错误(执行继续、退出码 0),临时文件路径一律用 `[System.IO.Path]::GetTempPath()` 拼接;`.NET` 在 macOS 上 `SetEnvironmentVariable('Path', ..., 'User')` 是 no-op(真实 PATH round-trip 只能在 Windows CI 验证)。
+- 命令:`irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex`;选项 `-version/-dir/-no-modify-rc/-file/-uninstall/-help` 与 sh 对齐。
+
+**`orzmc self-uninstall`(库 `orzmc/services/selfinstall.py`,公共 API `uninstall_self`)**:`InstallManifest`(frozen dataclass,`write/read/from_lines/find`;`find` 先 state 目录 `install.conf`,再二进制旁 `.orzmc-manifest` 兜底)。`SelfUninstaller.uninstall` 顺序:**安全护栏 → 读 manifest → 还原 PATH → 删二进制 → rmdir 空目录 → 删 manifest → 游戏数据**(`--remove-root`/`--yes`/交互 confirm 控制,默认保留)。
+- **安全护栏**:路径含 `.venv`/`venv`/`env`/`site-packages`/`dist-packages`/`_MEI*`,或 `_MEIPASS` 同目录 → 拒绝(`RuntimeError`),`--force` 放行——防误删开发环境 / 已解包的 PyInstaller 产物。
+- **pip 托管检测**:二进制旁有 `*.dist-info` 或路径含 site-packages → 不删二进制,提示「请用 pip uninstall orzmc-app 卸载」。
+- **PATH 还原**:Unix 从 `path_file` 删精确 `path_line` 行;Windows 从 User PATH(winreg,stdlib,guard import)移除记录 token 并广播 `WM_SETTINGCHANGE`,失败只 warn。
+- **PyInstaller onefile 自删除限制**:删除正在运行的 onefile 可执行文件后,任何后续 PYZ 懒加载 import 都会 `SystemExit`——**二进制删除必须是最后一个操作**(所有 reporter 输出之后)。Windows 锁定时 `rename` + `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` 兜底并提示重启后删除。
+
+**CI `installer` job(ci.yml)**:push-only(发版 tag 与 PR 不跑,同 `binary`),6 平台矩阵,`needs: quality`。**鸡生蛋**:最新已发布二进制尚不含 `self-uninstall`,e2e 必须本地构建 + `--file` 接缝,不能拉 release。Unix(`shell: bash`):`XDG_STATE_HOME=$RUNNER_TEMP/orzmc-state` + `--dir` + `--no-modify-rc`;Windows(`shell: pwsh`):`LOCALAPPDATA=$RUNNER_TEMP\orzmc-state` + `ORZMC_NO_RC=1`,`powershell -File` 跑 PS 5.1。闭环:安装 → `version` → `self-uninstall --yes` → 断言二进制与 manifest 已删。环境隔离保证不碰真实 PATH / rc / 用户目录。
 
 ## 常用命令
 
@@ -117,7 +146,7 @@ uv lock                            # 锁定依赖
 
 **6 平台矩阵**(多处复用同一组 runner 标签):`ubuntu-latest`、`ubuntu-24.04-arm`、`macos-15-intel`、`macos-15`、`windows-latest`、`windows-11-arm`。注意 **`macos-13` 已废弃**,x86_64 macOS 用 `macos-15-intel`;`macos-latest` 已迁到 macOS 26,arm64 显式钉 `macos-15`。arm64 runner 为 public preview。
 
-- **`ci.yml`(push/PR)**:`quality` 单 runner 跑格式/lint/mypy/测试/构建(平台无关);`test` 6 平台全跑 pytest(纯 Python 假件但覆盖 OS 敏感路径,秒级);`binary` 仅 `push` 分支跑(发版 tag push 与 PR 不跑),6 平台 PyInstaller 构建 + 上传 artifact。声明 `workflow_call` + `skip-test-matrix` input,供 release 复用。
+- **`ci.yml`(push/PR)**:`quality` 单 runner 跑格式/lint/mypy/测试/构建(平台无关);`test` 6 平台全跑 pytest(纯 Python 假件但覆盖 OS 敏感路径,秒级);`binary` 与 `installer` 仅 `push` 分支跑(发版 tag push 与 PR 不跑)——`binary` 6 平台 PyInstaller 构建 + 上传 artifact,`installer` 6 平台安装器 e2e(本地构建 `--file` 接缝 + 隔离环境,装→`version`→`self-uninstall`→断言二进制与 manifest 已删,见上文「一键安装/卸载」)。声明 `workflow_call` + `skip-test-matrix` input,供 release 复用。
 - **`acceptance.yml`(每日 04:23 UTC + workflow_dispatch)**:真实验收 harness `scripts/acceptance.py`(跨平台,stdlib + psutil 进程树管理,替代 `pgrep`/`pkill`;`-m orzmc_app.cli` 调 CLI,不嵌套 `uv run`)。
   - **版本策略(以最新版为主基准)**:`primary` job 夜间+手动,6 平台跑最新版 × 全部类型(server vanilla/paper/fabric/forge + client vanilla/fabric/forge);`backcompat` job 仅手动 `suite=full`,x86_64 三平台跑旧版本 vanilla 冒烟(`--backcompat`,默认 `1.20.4`)。`latest` 由 Mojang `version_manifest_v2.json` 的 `latest.release` 解析,不额外拉取其它源。
   - **判定语义**:`PASS`(server 日志 `Done (` / client 退出码 0 引导级);`UP(no Done)`(端口开 90s 无 Done = Mojang MC-263542 世界生成卡死,记警告不判失败);`SKIP`(日志含"不支持 Minecraft"/"未找到 Minecraft",类型暂未适配该版本,如 Forge 滞后);`UP(gap)`(上游无该平台产物:Adoptium 对某 OS/arch/major 的 Temurin 返回 404,或 Mojang 无该 arch 的 lwjgl natives —— 记警告不判失败,上游补齐后自动恢复真实判定);`FAIL`/`TIMEOUT` 判失败。客户端引导级判定依赖 Linux `xvfb-run`,headless 需装 xvfb;`--deep-client` 仅真机手动用(CI 的 macOS/Windows 无 GL 上下文会假阴性)。
