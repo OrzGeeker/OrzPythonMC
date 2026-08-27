@@ -214,10 +214,13 @@ class SelfUninstaller:
         return any(name.endswith(".dist-info") or name.endswith(".egg-info") for name in entries)
 
     def _restore_path(self, manifest: InstallManifest) -> bool:
-        if os.name == "nt":
-            return self._restore_windows_path(manifest)
+        # rc 文件式安装(install.sh 记录 path_file+path_line)在 Windows 上
+        # 也先还原 rc 文件;注册表还原只用于无 path_file 的安装(install.ps1
+        # 只记 path_line=install_dir token)。
         if manifest.path_file and manifest.path_line:
             return self._remove_line_from_file(manifest.path_file, manifest.path_line)
+        if os.name == "nt" and manifest.path_line:
+            return self._restore_windows_path(manifest)
         return False
 
     def _remove_line_from_file(self, path: str, line: str) -> bool:

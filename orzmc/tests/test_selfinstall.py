@@ -406,3 +406,32 @@ class TestWindowsPathRestore:
         assert result is True
         assert fake.path == "C:\\Users\\u\\bin"  # 未改动
         assert not _has(reporter, "无法修改 Windows 用户 PATH")
+
+    def test_rc_file_restore_has_priority_on_windows(self, state_dir, tmp_path, monkeypatch) -> None:
+        """rc 文件式安装(path_file+path_line)在 Windows 上也还原 rc,不碰注册表。
+
+        回归:os.name=="nt" 曾让 _restore_path 无条件走注册表,rc 行未删
+        (Windows CI 上 test_uninstall_removes_binary_and_exact_rc_line 失败)。
+        本测试在 macOS/Linux 用 monkeypatch 模拟 nt,验证路由与注册表隔离。
+        """
+        fs = FileStore()
+        install_dir = str(tmp_path / "bin")
+        binary = os.path.join(install_dir, "orzmc.exe")
+        fs.write_text(binary, "x")
+        rc = str(tmp_path / ".zshrc")
+        path_line = f'export PATH="{install_dir}:$PATH"'
+        fs.write_text(rc, path_line + "\nalias foo=bar\n")
+        _seed(fs, state_dir, binary=binary, install_dir=install_dir, path_file=rc, path_line=path_line)
+        fake = self._FakeWinReg()
+        fake.path = "C:\\Users\\u\\bin"
+        monkeypatch.setitem(sys.modules, "winreg", fake)
+        monkeypatch.setattr(os, "name", "nt")
+
+        result = SelfUninstaller(fs=fs).uninstall(binary, yes=True)
+
+        assert result is True
+        rc_text = fs.read_text(rc)
+        assert path_line not in rc_text
+        assert "alias foo=bar" in rc_text
+        assert fake.opened == []  # 注册表从未被打开
+        assert fake.path == "C:\\Users\\u\\bin"

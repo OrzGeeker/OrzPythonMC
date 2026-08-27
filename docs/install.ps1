@@ -1,4 +1,4 @@
-# OrzMC 一键安装器(Windows)—— PowerShell 5.1+。
+﻿# OrzMC 一键安装器(Windows)—— PowerShell 5.1+。
 #
 # 用法(主推,一条命令):
 #   irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex
