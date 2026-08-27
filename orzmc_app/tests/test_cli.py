@@ -8,6 +8,7 @@ import sys
 from typer.testing import CliRunner
 
 from orzmc import FileStore
+from orzmc_app import __version__
 from orzmc_app.cli import app
 
 # ``orzmc_app.cli.app`` 包属性被 __init__ 重导出遮蔽成 Typer 实例,
@@ -20,7 +21,7 @@ runner = CliRunner()
 def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "2.0.0" in result.stdout
+    assert __version__ in result.stdout
 
 
 def test_help_lists_all_commands() -> None:

@@ -5,6 +5,6 @@ The app layer only calls the library's public API (``orzmc/__init__.py``).
 
 from __future__ import annotations
 
-__version__ = "2.0.0"
+__version__ = "2.0.2"
 
 __all__ = ["__version__"]
