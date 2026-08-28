@@ -93,6 +93,7 @@ python/                         # uv workspace 根
 - **不用 `param()` 块**(兼容 `irm | iex`,脚本内容被求值时无参数表),参数从 `$args` 手工 token 解析;共享状态统一 `$script:` 前缀,保证 `-File`(脚本作用域)与 iex(调用方全局作用域)两调用方式行为一致。
 - **不显式 `exit`**(iex 下会连宿主 PowerShell 窗口一起关);错误用 `die` → `throw`(`-File` 下未捕获异常退出码 1,iex 下只报错、宿主窗口保留)。
 - 开头保存、`finally` 恢复 `$ErrorActionPreference`/`$ProgressPreference`,避免污染 iex 宿主全局状态。
+- **编码自愈(PS 5.1 中文乱码)**:GitHub Pages 对 `.ps1` 返回 `application/octet-stream`(无 charset),PS 5.1 的 `irm` 会按 Latin-1 **逐字节解码**,每个 UTF-8 字节变成一个乱码字符(功能正常、仅中文显示乱码;pwsh 按 UTF-8 正确解码)。脚本顶部用中文探测串 `'已安装到'` 探测——若不含 CJK 字符(≥ U+2000)即已被误解码,则触发自愈:重抓自身 URL(`ORZMC_INSTALL_URL` 可覆盖)→ 逐字节字符反转回 UTF-8 字节 → 恢复原始源码 → `& ([scriptblock]::Create($__clean)) @args` 带原参数重新执行。pwsh / `-File`(带 BOM)探测为干净,零开销;重抓失败降级继续(乱码但功能正常)。**不要移除顶部自愈块**;它是「不改一键命令地址」时唯一能治好 PS 5.1 乱码的机制。
 - 架构探测:`PROCESSOR_ARCHITEW6432`(32 位 PS 取真实架构)兜底 `PROCESSOR_ARCHITECTURE`;下载产物校验 PE 头 `MZ`;PATH 追加 User env var(`;` 分 token 判重)。
 - **已知坑**:`Join-Path $null "x"` 在 EAP=Stop 下仍是非终止错误(执行继续、退出码 0),临时文件路径一律用 `[System.IO.Path]::GetTempPath()` 拼接;`.NET` 在 macOS 上 `SetEnvironmentVariable('Path', ..., 'User')` 是 no-op(真实 PATH round-trip 只能在 Windows CI 验证)。
 - 命令:`irm https://orzmc.github.io/OrzPythonMC/install.ps1 | iex`;选项 `-version/-dir/-no-modify-rc/-file/-uninstall/-help` 与 sh 对齐。

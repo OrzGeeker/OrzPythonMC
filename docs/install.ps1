@@ -17,6 +17,36 @@
 #     iex 场景则只报错、宿主窗口保留。
 #   * 共享状态统一用 $script: 前缀,保证 `-File`(脚本作用域)与
 #     `irm | iex`(调用方全局作用域)两种调用方式行为一致。
+#   * 编码自愈:GitHub Pages 对 .ps1 返回 octet-stream(无 charset),PS 5.1 的
+#     irm 会逐字节(Latin-1)误解码,中文显示乱码(功能不受影响)。顶部自愈块探测
+#     到误解码时,重抓自身 URL 恢复原始 UTF-8 源码后重新执行,任何环境都不乱码。
+
+# ── 编码自愈(仅 PS 5.1 经 irm 按 octet-stream 逐字节误解码时触发)───────────────
+# 探测:若下方中文探测串不含 CJK 字符(≥ U+2000)= 已被逐字节误解码。此时重抓自身
+# URL,把逐字节字符反转回 UTF-8 字节恢复原始源码,带上原参数重新执行,中文输出恢复
+# 正常。pwsh 与 -File(带 BOM)解码正确,探测为干净,不走此路径;重抓失败则降级继续。
+$__probe = '已安装到'
+$__needHeal = $true
+foreach ($__c in $__probe.ToCharArray()) {
+    if ([int][char]$__c -ge 0x2000) { $__needHeal = $false; break }
+}
+if ($__needHeal) {
+    $__url = $env:ORZMC_INSTALL_URL
+    if (-not $__url) { $__url = 'https://orzmc.github.io/OrzPythonMC/install.ps1' }
+    try {
+        $__raw = Invoke-RestMethod -Uri $__url
+        $__bytes = New-Object byte[] $__raw.Length
+        for ($__i = 0; $__i -lt $__raw.Length; $__i++) { $__bytes[$__i] = [byte][int][char]$__raw[$__i] }
+        $__clean = [Text.Encoding]::UTF8.GetString($__bytes)
+        if ($__clean -match 'OrzMC') {
+            & ([scriptblock]::Create($__clean)) @args
+            return
+        }
+    } catch {
+        # 重抓失败:降级,用当前(乱码但功能正常)的脚本继续执行
+    }
+}
+Remove-Variable __probe,__needHeal,__c -ErrorAction SilentlyContinue
 
 $savedErrorActionPreference = $ErrorActionPreference
 $savedProgressPreference = $ProgressPreference
@@ -230,7 +260,7 @@ function Do-Install {
     Register-Path
     Write-Manifest
 
-    Write-Host "✅ orzmc 已安装到 $($script:Binary)" -ForegroundColor Green
+    Write-Host "[OK] orzmc 已安装到 $($script:Binary)" -ForegroundColor Green
     if ($script:PathLine) {
         Write-Host '已写入用户 PATH;请重新打开终端(或新开 PowerShell 窗口)后使用。'
     }

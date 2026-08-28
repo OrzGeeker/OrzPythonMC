@@ -265,7 +265,7 @@ do_install() {
     register_path
     write_manifest
 
-    echo "✅ orzmc 已安装到 $BINARY"
+    echo "[OK] orzmc 已安装到 $BINARY"
     if [ -n "$PATH_FILE" ]; then
         echo "已写入 PATH 配置: $PATH_FILE"
         echo "请重新打开终端,或执行: source $PATH_FILE"

@@ -25,6 +25,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - name: Strip UTF-8 BOM from install.ps1 (fixes irm | iex)
+        run: |
+          # The repo file keeps its BOM so `powershell -File` reads UTF-8
+          # correctly on zh-CN codepage machines. But `irm ... | iex` evaluates
+          # the served content as a string, and a leading U+FEFF turns the
+          # first line into a bogus command (The term 'Windows' is not
+          # recognized). Strip it from the deployed copy only.
+          python3 -c "from pathlib import Path; p=Path('docs/install.ps1'); b=p.read_bytes(); p.write_bytes(b[3:] if b[:3]==b'\xef\xbb\xbf' else b)"
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v5
         with:
