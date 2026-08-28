@@ -42,6 +42,12 @@ class ProcessRunner:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            # JVM children (Fabric/Forge installers) write the system ANSI
+            # codepage (e.g. GBK on zh-CN), but the parent's decode follows
+            # PYTHONUTF8/locale — a mismatch must degrade to replacement chars,
+            # never raise and kill the deploy. Same lossy philosophy as the
+            # client log tail read in services/client.py.
+            errors="replace",
             bufsize=1,
             cwd=cwd,
         )

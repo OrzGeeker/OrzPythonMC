@@ -8,6 +8,7 @@ tested through :func:`_shutdown_after_interrupt` directly.
 
 from __future__ import annotations
 
+import locale
 import subprocess
 import sys
 
@@ -29,6 +30,24 @@ class TestProcessRunner:
     def test_run_stream_forwards_output_without_on_line(self, reporter: FakeReporter) -> None:
         args = [sys.executable, "-c", "print('no handler')"]
         assert ProcessRunner(reporter).run_stream(args) == 0
+
+    def test_run_stream_tolerates_undecodable_bytes(self, reporter: FakeReporter, monkeypatch) -> None:
+        # JVM children (Fabric/Forge installers) write the system ANSI codepage
+        # (e.g. GBK on zh-CN); under PYTHONUTF8 the parent decodes as UTF-8, so
+        # a lone 0xd5 must degrade to a replacement char, not raise
+        # UnicodeDecodeError and kill the deploy. Force the parent's decode to
+        # utf-8 so the test is deterministic on every locale.
+        monkeypatch.setattr(locale, "getencoding", lambda: "utf-8")
+        monkeypatch.setattr(locale, "getpreferredencoding", lambda do_setlocale=False: "utf-8")
+        args = [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.buffer.write(bytes([0xd5, 0x0a])); sys.stdout.buffer.flush()",
+        ]
+        lines: list[str] = []
+        code = ProcessRunner(reporter).run_stream(args, on_line=lines.append)
+        assert code == 0
+        assert lines == ["�"]
 
     def test_shutdown_after_interrupt_waits_for_graceful_exit(self, monkeypatch) -> None:
         monkeypatch.setattr(runner_mod, "_INTERRUPT_WAIT", 10.0)
